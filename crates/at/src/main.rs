@@ -48,15 +48,10 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
         );
     }
 
-    // Decide which ports to scan.
-    let ports_to_scan: Vec<u16> = if let Some(port) = target.port {
-        vec![port]
-    } else if let Some(spec) = &args.ports {
-        scan::parse_port_spec(spec).map_err(|e| anyhow::anyhow!(e))?
-    } else if args.full {
-        scan::full_port_list()
-    } else {
-        scan::common_port_list()
+    // Scan every port, unless the target pins a single one.
+    let ports_to_scan: Vec<u16> = match target.port {
+        Some(port) => vec![port],
+        None => scan::all_ports(),
     };
 
     // Port scan.

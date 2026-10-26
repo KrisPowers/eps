@@ -1,8 +1,7 @@
-//! Curated catalog of common service ports and HTTP-likely hints.
+//! Catalog of well-known service ports and HTTP-likely hints.
 //!
-//! The default scan covers this list rather than all 65,535 ports so a bare
-//! `at @host` stays fast and polite. Use `--full` for an exhaustive sweep or
-//! `--ports` to supply your own set.
+//! The scan always covers all 65,535 ports; this catalog only labels the open
+//! ones and tells the HTTP phase which scheme to try first.
 
 /// A well-known port with its usual service label and whether it typically
 /// speaks HTTP (and if so, over TLS).
@@ -21,9 +20,9 @@ const fn p(port: u16, service: &'static str, http_tls: Option<bool>) -> KnownPor
     }
 }
 
-/// Top ~120 commonly exposed ports, biased toward services an application
+/// Well-known service ports, biased toward services an application
 /// engineer is likely to stand up or leave open by accident.
-pub const COMMON: &[KnownPort] = &[
+pub const KNOWN: &[KnownPort] = &[
     p(21, "ftp", None),
     p(22, "ssh", None),
     p(23, "telnet", None),
@@ -124,9 +123,9 @@ pub const COMMON: &[KnownPort] = &[
     p(50070, "hadoop-namenode", Some(false)),
 ];
 
-/// Ports in [`COMMON`] that typically speak HTTP, with their TLS flag.
+/// Ports in [`KNOWN`] that typically speak HTTP, with their TLS flag.
 pub fn http_hint(port: u16) -> Option<bool> {
-    COMMON
+    KNOWN
         .iter()
         .find(|k| k.port == port)
         .and_then(|k| k.http_tls)
@@ -134,7 +133,7 @@ pub fn http_hint(port: u16) -> Option<bool> {
 
 /// Human service label for a port, or `"unknown"`.
 pub fn service_name(port: u16) -> &'static str {
-    COMMON
+    KNOWN
         .iter()
         .find(|k| k.port == port)
         .map(|k| k.service)
