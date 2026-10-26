@@ -82,3 +82,50 @@ pub fn default_paths() -> Vec<PathSpec> {
 
 /// How an endpoint responded to an unauthenticated request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthState {
+    /// 2xx without credentials - reachable by anyone.
+    Open,
+    /// 401/403 - an auth or authorization gate is in place.
+    Protected,
+    /// 3xx - redirected (often to a login page).
+    Redirected,
+    /// 429 - rate limited on the first hit.
+    RateLimited,
+    /// Exists but returned a server/other status (405, 5xx, ...).
+    Present,
+}
+
+impl AuthState {
+    pub fn label(self) -> &'static str {
+        match self {
+            AuthState::Open => "OPEN (no auth)",
+            AuthState::Protected => "protected",
+            AuthState::Redirected => "redirect",
+            AuthState::RateLimited => "rate-limited",
+            AuthState::Present => "present",
+        }
+    }
+}
+
+/// Passive + optional active rate-limit observations for one endpoint.
+#[derive(Debug, Clone, Default)]
+pub struct RateLimitInfo {
+    /// Rate-limit-related headers seen on the response.
+    pub headers_seen: Vec<String>,
+    /// Value of `Retry-After`, if present.
+    pub retry_after: Option<String>,
+    /// If an active burst was run: `Some((requests_sent, throttled))`.
+    pub active: Option<(usize, bool)>,
+}
+
+impl RateLimitInfo {
+    /// Whether any rate limiting was advertised or observed.
+    pub fn any_signal(&self) -> bool {
+        !self.headers_seen.is_empty()
+            || self.retry_after.is_some()
+            || matches!(self.active, Some((_, true)))
+    }
+}
+
+/// A single discovered, existing endpoint and its posture.
+#[derive(Debug, Clone)]
