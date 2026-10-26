@@ -60,3 +60,43 @@ async fn probe(addr: SocketAddr, per_port_timeout: Duration) -> PortState {
 
 /// Scan `ports` on `ip`, probing up to `concurrency` ports at once. Returns the
 /// open ports, sorted ascending, annotated with catalog hints.
+pub async fn scan_ports(
+    ip: IpAddr,
+    ports_to_scan: &[u16],
+    concurrency: usize,
+    per_port_timeout: Duration,
+) -> Vec<OpenPort> {
+    let results = stream::iter(ports_to_scan.iter().copied())
+        .map(|port| async move {
+            let state = probe(SocketAddr::new(ip, port), per_port_timeout).await;
+            (port, state)
+        })
+        .buffer_unordered(concurrency.max(1))
+        .collect::<Vec<_>>()
+        .await;
+
+    let mut open: Vec<OpenPort> = results
+        .into_iter()
+        .filter(|(_, state)| *state == PortState::Open)
+        .map(|(port, _)| OpenPort {
+            port,
+            service: ports::service_name(port),
+            http_tls: ports::http_hint(port),
+        })
+        .collect();
+    open.sort_by_key(|o| o.port);
+    open
+}
+
+/// The default port set (the curated common list).
+pub fn common_port_list() -> Vec<u16> {
+    ports::COMMON.iter().map(|k| k.port).collect()
+}
+
+/// Every port, 1..=65535, for `--full`.
+pub fn full_port_list() -> Vec<u16> {
+    (1..=u16::MAX).collect()
+}
+
+/// Parse a `--ports` spec like `80,443,8000-8100` into a sorted, de-duplicated
+/// port list.
