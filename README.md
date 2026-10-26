@@ -5,8 +5,8 @@
 `@` is a read-only reconnaissance CLI for network and software engineers. Give it
 an IP address (with or without a port) and it reports, in one command:
 
-- **Open ports** - a TCP *connect* scan (no raw sockets, no root) over a curated
-  list of commonly exposed ports, or any set you choose.
+- **Open ports** - a TCP *connect* scan (no raw sockets, no root) across all
+  65,535 ports.
 - **Endpoints** - for HTTP(S) services it discovers conventional,
   framework-published paths (health probes, metrics, API docs, management
   consoles, and classic over-exposure sources like `/actuator/env` or `/.git/HEAD`).
@@ -67,10 +67,8 @@ Make sure the install dir is on your `PATH` (`~/.local/bin` by default).
 ## Usage
 
 ```sh
-@ 192.168.1.10            # scan common ports, then inspect any HTTP services
+@ 192.168.1.10            # scan all 65535 ports, then inspect any HTTP services
 @ 192.168.1.10:8080       # inspect a single pinned port
-@ 10.0.0.5 --full         # scan all 65535 ports
-@ 10.0.0.5 --ports 80,443,8000-8100
 @ api.internal --json     # machine-readable output for pipelines/CI
 @ 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
 ```
@@ -95,8 +93,6 @@ IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
 | Flag | Meaning |
 |------|---------|
 | `--json` | Emit structured JSON instead of the text report. |
-| `--full` | Scan all 65,535 ports instead of the common list. |
-| `--ports <SPEC>` | Custom port set, e.g. `80,443,8000-8100`. |
 | `--no-discovery` | Report open ports only; skip HTTP discovery. |
 | `--connect-timeout <MS>` | Per-port TCP connect timeout (default 800 ms). |
 | `--http-timeout <SECS>` | Per-request HTTP timeout (default 6 s). |

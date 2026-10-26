@@ -88,58 +88,9 @@ pub async fn scan_ports(
     open
 }
 
-/// The default port set (the curated common list).
-pub fn common_port_list() -> Vec<u16> {
-    ports::COMMON.iter().map(|k| k.port).collect()
-}
-
-/// Every port, 1..=65535, for `--full`.
-pub fn full_port_list() -> Vec<u16> {
+/// Every TCP port, 1..=65535.
+pub fn all_ports() -> Vec<u16> {
     (1..=u16::MAX).collect()
-}
-
-/// Parse a `--ports` spec like `80,443,8000-8100` into a sorted, de-duplicated
-/// port list.
-pub fn parse_port_spec(spec: &str) -> Result<Vec<u16>, String> {
-    let mut out = Vec::new();
-    for part in spec.split(',') {
-        let part = part.trim();
-        if part.is_empty() {
-            continue;
-        }
-        match part.split_once('-') {
-            Some((a, b)) => {
-                let start: u16 = a
-                    .trim()
-                    .parse()
-                    .map_err(|_| format!("invalid port `{a}` in range"))?;
-                let end: u16 = b
-                    .trim()
-                    .parse()
-                    .map_err(|_| format!("invalid port `{b}` in range"))?;
-                if start == 0 || end == 0 {
-                    return Err("port 0 is not valid".to_string());
-                }
-                if start > end {
-                    return Err(format!("range `{part}` is backwards"));
-                }
-                out.extend(start..=end);
-            }
-            None => {
-                let n: u16 = part.parse().map_err(|_| format!("invalid port `{part}`"))?;
-                if n == 0 {
-                    return Err("port 0 is not valid".to_string());
-                }
-                out.push(n);
-            }
-        }
-    }
-    if out.is_empty() {
-        return Err("no ports in spec".to_string());
-    }
-    out.sort_unstable();
-    out.dedup();
-    Ok(out)
 }
 
 #[cfg(test)]
@@ -147,23 +98,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn port_spec_singles_and_ranges() {
-        let got = parse_port_spec("80,443,8000-8002").unwrap();
-        assert_eq!(got, vec![80, 443, 8000, 8001, 8002]);
-    }
-
-    #[test]
-    fn port_spec_dedups_and_sorts() {
-        let got = parse_port_spec("443,80,443,80").unwrap();
-        assert_eq!(got, vec![80, 443]);
-    }
-
-    #[test]
-    fn port_spec_rejects_garbage() {
-        assert!(parse_port_spec("abc").is_err());
-        assert!(parse_port_spec("100-50").is_err());
-        assert!(parse_port_spec("0").is_err());
-        assert!(parse_port_spec("").is_err());
+    fn all_ports_covers_full_range() {
+        let ports = all_ports();
+        assert_eq!(ports.len(), 65535);
+        assert_eq!(ports.first(), Some(&1));
+        assert_eq!(ports.last(), Some(&u16::MAX));
     }
 
     #[tokio::test]

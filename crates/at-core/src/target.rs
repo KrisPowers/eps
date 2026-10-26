@@ -4,7 +4,7 @@
 //! optional but canonical):
 //!
 //! ```text
-//! @192.168.1.10          -> scan common ports on an IPv4 host
+//! @192.168.1.10          -> scan every port on an IPv4 host
 //! @192.168.1.10:8080     -> inspect a single port
 //! @example.internal      -> hostnames are resolved via the system resolver
 //! @[2001:db8::1]:443      -> bracketed IPv6 with a port
