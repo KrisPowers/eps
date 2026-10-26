@@ -229,3 +229,56 @@ fn is_api_like(path: &str) -> bool {
         || p.starts_with("rest")
 }
 
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+fn use_color() -> bool {
+    std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
+}
+
+/// Assemble a serializable report (used for JSON and as the render source).
+pub fn assemble(
+    target: &str,
+    resolved_ip: &str,
+    open_ports: &[OpenPort],
+    services: &[ServiceReport],
+) -> Report {
+    let findings = build_findings(open_ports, services);
+
+    let open_ports_view = open_ports
+        .iter()
+        .map(|o| PortView {
+            port: o.port,
+            service: o.service.to_string(),
+        })
+        .collect();
+
+    let mut endpoints = Vec::new();
+    for svc in services {
+        for ep in &svc.endpoints {
+            endpoints.push(EndpointView {
+                url: ep.url.clone(),
+                status: ep.status,
+                auth: ep.auth.label().to_string(),
+                tls: ep.tls,
+                sensitive: ep.sensitive,
+                rate_limited: ep.rate_limit.any_signal(),
+                note: ep.note.clone(),
+                server: ep.server.clone(),
+                content_type: ep.content_type.clone(),
+                location: ep.location.clone(),
+            });
+        }
+    }
+
+    Report {
+        target: target.to_string(),
+        resolved_ip: resolved_ip.to_string(),
+        open_ports: open_ports_view,
+        endpoints,
+        findings,
+    }
+}
+
+/// Render the report as readable text for a terminal.
