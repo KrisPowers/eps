@@ -13,10 +13,12 @@ use clap::Parser;
     version,
     about = "Read-only recon: `@ <ip>[:port]` reports exposed ports and endpoint posture.",
     long_about = None,
-    after_help = "EXAMPLES:\n  @ 192.168.1.10            scan all 65535 ports + inspect HTTP services\n  @ 192.168.1.10:8080       inspect a single port\n  @ 10.0.0.5 --json         machine-readable output\n\nUse only against hosts you own or are explicitly authorized to test."
+    after_help = "EXAMPLES:\n  @                         scan this machine (localhost)\n  @ 192.168.1.10           scan all 65535 ports + inspect HTTP services\n  @ 192.168.1.10:8080       inspect a single port\n  @ 10.0.0.5 --json         machine-readable output\n\nUse only against hosts you own or are explicitly authorized to test."
 )]
 pub struct Cli {
     /// Target host, host:port, or [ipv6]:port (a leading `@` is also accepted).
+    /// Defaults to this machine.
+    #[arg(default_value = "localhost")]
     pub target: String,
 
     /// Emit JSON instead of the human-readable report.

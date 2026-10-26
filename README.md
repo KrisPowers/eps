@@ -71,6 +71,7 @@ Make sure the install dir is on your `PATH` (`~/.local/bin` by default).
 ## Usage
 
 ```sh
+@                         # scan this machine (localhost)
 @ 192.168.1.10            # scan all 65535 ports, then inspect any HTTP services
 @ 192.168.1.10:8080       # inspect a single pinned port
 @ api.internal --json     # machine-readable output for pipelines/CI
