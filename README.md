@@ -136,23 +136,21 @@ as in the example below. When the target pins a port
 are shown.
 
 ```
-╭────────────────────────────────────────────────────────────────────────────╮
+┌────────────────────────────────────────────────────────────────────────────┐
 │ @ api.internal                                                   10.0.0.42 │
 │ 2 open ports  ·  3 endpoints                                               │
-╰────────────────────────────────────────────────────────────────────────────╯
+└────────────────────────────────────────────────────────────────────────────┘
 
-  PORTS ──────────────────────────────────────────────────────────────────────
-     22/tcp   ssh
-   8080/tcp   http-proxy
+PORTS ────────────────────────────────────────────────────────────────────────
+22/tcp     ssh
+8080/tcp   http-proxy
 
-  ENDPOINTS  http://api.internal:8080 ────────────────────────────────────────
-  [configured+] [insecure~] [not configured-] [not shown?]
+ENDPOINTS  http://api.internal:8080 ──────────────────────────────────────────
+[configured+] [insecure~] [not configured-] [not shown?]
 
-  200  [AUTH-] [JWT-] [RATE-] [HTTPS-]  /actuator/env
-  401  [AUTH~] [JWT-] [RATE-] [HTTPS-]  /admin         admin console
-  200  [AUTH-] [JWT-] [RATE+] [HTTPS-]  /api           API root
-
-  Read-only scan - exposure is reported, not judged.
+200  [AUTH-] [JWT-] [RATE-] [HTTPS-]  /actuator/env
+401  [AUTH~] [JWT-] [RATE-] [HTTPS-]  /admin         admin console
+200  [AUTH-] [JWT-] [RATE+] [HTTPS-]  /api           API root
 ```
 
 ### Exit codes
