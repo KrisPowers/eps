@@ -32,3 +32,11 @@ const RATE_LIMIT_HEADERS: &[&str] = &[
 
 /// One conventional path to probe.
 #[derive(Debug, Clone)]
+pub struct PathSpec {
+    pub path: String,
+    pub sensitive: bool,
+    pub note: String,
+}
+
+/// Configuration for the HTTP phase.
+#[derive(Debug, Clone)]
