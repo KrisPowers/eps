@@ -48,9 +48,41 @@ try {
         Write-Host "Added $dir to your user PATH (restart your shell to pick it up)."
     }
 
+    # PowerShell's parser rejects a bare `@`, so a PSReadLine Enter handler in
+    # the profile rewrites `@ <target>` into a call to @.exe before parsing.
+    $profilePath = $PROFILE.CurrentUserCurrentHost
+    $marker = '# >>> @ >>>'
+    $existing = if (Test-Path $profilePath) { Get-Content -Raw $profilePath } else { '' }
+    if ($existing -notlike "*$marker*") {
+        New-Item -ItemType Directory -Force -Path (Split-Path $profilePath) | Out-Null
+        $block = @'
+
+# >>> @ >>>
+# Lets `@ <target>` run @.exe. PowerShell's parser rejects a bare `@`, so Enter
+# rewrites the line before it is parsed. `@(...)`, `@{...}` and here-strings
+# are left alone.
+if (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
+    Set-PSReadLineKeyHandler -Key Enter -ScriptBlock {
+        param($key, $arg)
+        $line = $null
+        $cursor = $null
+        [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
+        if ($line -match '^\s*@(\s|$)') {
+            $rest = $line -replace '^\s*@', ''
+            [Microsoft.PowerShell.PSConsoleReadLine]::Replace(0, $line.Length, "& '@.exe'$rest")
+        }
+        [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine($key, $arg)
+    }
+}
+# <<< @ <<<
+'@
+        Add-Content -Path $profilePath -Value $block -Encoding utf8
+        Write-Host "Added the @ command to $profilePath."
+    }
+
     Write-Host ""
-    Write-Host "Try it (PowerShell treats @ specially, so call it explicitly):"
-    Write-Host "  & '@' 127.0.0.1"
+    Write-Host "Try it (in a new shell):"
+    Write-Host "  @ 127.0.0.1"
 }
 finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
