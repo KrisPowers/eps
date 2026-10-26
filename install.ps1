@@ -48,35 +48,35 @@ try {
         Write-Host "Added $dir to your user PATH (restart your shell to pick it up)."
     }
 
-    # PowerShell's parser rejects a bare `@`, so a PSReadLine Enter handler in
-    # the profile rewrites `@ <target>` into a call to @.exe before parsing.
+    # PowerShell's parser rejects a bare `@`, so the profile wraps the host's
+    # line reader and rewrites `@ <target>` into a call to @.exe after the line
+    # is read. The screen and history keep what was typed. An older block is
+    # replaced in place.
     $profilePath = $PROFILE.CurrentUserCurrentHost
-    $marker = '# >>> @ >>>'
-    $existing = if (Test-Path $profilePath) { Get-Content -Raw $profilePath } else { '' }
-    if ($existing -notlike "*$marker*") {
-        New-Item -ItemType Directory -Force -Path (Split-Path $profilePath) | Out-Null
-        $block = @'
-
+    $block = @'
 # >>> @ >>>
-# Lets `@ <target>` run @.exe. PowerShell's parser rejects a bare `@`, so Enter
-# rewrites the line before it is parsed. `@(...)`, `@{...}` and here-strings
-# are left alone.
-if (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue) {
-    Set-PSReadLineKeyHandler -Key Enter -ScriptBlock {
-        param($key, $arg)
-        $line = $null
-        $cursor = $null
-        [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
-        if ($line -match '^\s*@(\s|$)') {
-            $rest = $line -replace '^\s*@', ''
-            [Microsoft.PowerShell.PSConsoleReadLine]::Replace(0, $line.Length, "& '@.exe'$rest")
-        }
-        [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine($key, $arg)
-    }
+# Lets `@ <target>` run @.exe. PowerShell's parser rejects a bare `@`, so the
+# line is rewritten after it is read and before it is parsed. The screen and
+# history keep what was typed. `@(...)`, `@{...}` and here-strings are left alone.
+$readLine = (Get-Command PSConsoleHostReadLine -CommandType Function -ErrorAction SilentlyContinue).ScriptBlock
+if ($readLine) {
+    Set-Item function:global:PSConsoleHostReadLine -Value {
+        $line = & $readLine
+        if ($line -match '^\s*@(\s|$)') { $line -replace '^\s*@', "& '@.exe'" } else { $line }
+    }.GetNewClosure()
 }
+Remove-Variable readLine
 # <<< @ <<<
 '@
-        Add-Content -Path $profilePath -Value $block -Encoding utf8
+    $existing = if (Test-Path $profilePath) { Get-Content -Raw $profilePath } else { '' }
+    $pattern = '(?s)# >>> @ >>>.*?# <<< @ <<<'
+    if ($existing -match $pattern) {
+        $updated = [regex]::Replace($existing, $pattern, { $block })
+        Set-Content -Path $profilePath -Value $updated.TrimEnd() -Encoding utf8
+        Write-Host "Updated the @ command in $profilePath."
+    } else {
+        New-Item -ItemType Directory -Force -Path (Split-Path $profilePath) | Out-Null
+        Add-Content -Path $profilePath -Value "`r`n$block" -Encoding utf8
         Write-Host "Added the @ command to $profilePath."
     }
 

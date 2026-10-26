@@ -44,8 +44,9 @@ curl -fsSL https://at.krispowers.dev/install.sh | sh
 irm https://at.krispowers.dev/install.ps1 | iex
 ```
 
-PowerShell's parser rejects a bare `@`, so the installer adds a small PSReadLine
-Enter handler to your profile that turns `@ <target>` into a call to `@.exe`.
+PowerShell's parser rejects a bare `@`, so the installer adds a small block to
+your profile that runs `@ <target>` as `@.exe`. What you typed stays on screen
+and in history as `@ <target>`.
 
 **Homebrew:**
 
