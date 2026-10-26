@@ -393,3 +393,64 @@ pub fn render_human(report: &Report, services: &[ServiceReport]) -> String {
     s
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::http::{Endpoint, RateLimitInfo};
+
+    fn open_ep(path: &str, sensitive: bool, status: u16) -> Endpoint {
+        Endpoint {
+            url: format!("http://h{path}"),
+            path: path.to_string(),
+            status,
+            auth: AuthState::Open,
+            tls: false,
+            sensitive,
+            note: "n".to_string(),
+            server: None,
+            content_type: None,
+            www_authenticate: None,
+            location: None,
+            rate_limit: RateLimitInfo::default(),
+        }
+    }
+
+    #[test]
+    fn sensitive_open_endpoint_is_high() {
+        let svc = ServiceReport {
+            port: 8080,
+            scheme: "http".to_string(),
+            reachable: true,
+            endpoints: vec![open_ep("/actuator/env", true, 200)],
+        };
+        let f = build_findings(&[], &[svc]);
+        assert!(f.iter().any(|x| x.severity == Severity::High));
+    }
+
+    #[test]
+    fn exposed_redis_is_high() {
+        let op = OpenPort {
+            port: 6379,
+            service: "redis",
+            http_tls: None,
+        };
+        let f = build_findings(&[op], &[]);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].severity, Severity::High);
+    }
+
+    #[test]
+    fn findings_sorted_high_first() {
+        let svc = ServiceReport {
+            port: 80,
+            scheme: "http".to_string(),
+            reachable: true,
+            endpoints: vec![
+                open_ep("/actuator/env", true, 200),
+                open_ep("/api", false, 200),
+            ],
+        };
+        let f = build_findings(&[], &[svc]);
+        assert!(f.windows(2).all(|w| w[0].severity >= w[1].severity));
+    }
+}
