@@ -1,0 +1,13 @@
+[package]
+name = "at-report"
+description = "Severity model and text/JSON rendering of `@` scan results."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+at-core.workspace = true
+at-http.workspace = true
+serde.workspace = true

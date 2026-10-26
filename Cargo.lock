@@ -81,12 +81,39 @@ name = "at"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "at-core",
+ "at-http",
+ "at-report",
  "clap",
- "futures",
- "reqwest",
- "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "at-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "tokio",
+]
+
+[[package]]
+name = "at-http"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "reqwest",
+]
+
+[[package]]
+name = "at-report"
+version = "0.1.0"
+dependencies = [
+ "at-core",
+ "at-http",
+ "serde",
 ]
 
 [[package]]
