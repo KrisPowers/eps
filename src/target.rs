@@ -92,3 +92,15 @@ impl Target {
     }
 }
 
+fn parse_port(p: &str) -> Result<u16, String> {
+    p.parse::<u16>()
+        .map_err(|_| format!("`{p}` is not a valid port (expected 1-65535)"))
+        .and_then(|n| {
+            if n == 0 {
+                Err("port 0 is not valid".to_string())
+            } else {
+                Ok(n)
+            }
+        })
+}
+
