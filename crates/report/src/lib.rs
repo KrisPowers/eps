@@ -6,8 +6,8 @@
 
 use std::io::IsTerminal;
 
-use at_core::scan::OpenPort;
-use at_http::{AuthState, Endpoint, ServiceReport};
+use endpoints::{AuthState, Endpoint, ServiceReport};
+use scanner::scan::OpenPort;
 use serde::Serialize;
 
 /// Impact tier for a finding.
@@ -395,7 +395,7 @@ pub fn render_human(report: &Report, services: &[ServiceReport]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use at_http::RateLimitInfo;
+    use endpoints::RateLimitInfo;
 
     fn open_ep(path: &str, sensitive: bool, status: u16) -> Endpoint {
         Endpoint {

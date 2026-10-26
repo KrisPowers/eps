@@ -10,9 +10,9 @@ license = "Apache-2.0"
 repository = "https://github.com/krispowers/at"
 
 [workspace.dependencies]
-at-core = { path = "crates/at-core" }
-at-http = { path = "crates/at-http" }
-at-report = { path = "crates/at-report" }
+scanner = { path = "crates/scanner" }
+endpoints = { path = "crates/endpoints" }
+report = { path = "crates/report" }
 clap = { version = "4.5", features = ["derive"] }
 tokio = { version = "1.40", features = ["rt-multi-thread", "net", "time", "macros", "sync"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "gzip"] }

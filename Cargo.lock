@@ -77,46 +77,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "at"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "at-core",
- "at-http",
- "at-report",
- "clap",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "at-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures",
- "tokio",
-]
-
-[[package]]
-name = "at-http"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures",
- "reqwest",
-]
-
-[[package]]
-name = "at-report"
-version = "0.1.0"
-dependencies = [
- "at-core",
- "at-http",
- "serde",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -226,6 +186,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "endpoints",
+ "report",
+ "scanner",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -275,6 +248,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "endpoints"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "reqwest",
 ]
 
 [[package]]
@@ -895,6 +877,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "report"
+version = "0.1.0"
+dependencies = [
+ "endpoints",
+ "scanner",
+ "serde",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -999,6 +990,15 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+name = "scanner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "tokio",
+]
 
 [[package]]
 name = "serde"

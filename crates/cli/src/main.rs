@@ -13,11 +13,10 @@ mod cli;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use at_core::scan;
-use at_core::target::Target;
-use at_http::{HttpConfig, PathSpec, ServiceReport};
-use at_report as report;
 use clap::Parser;
+use endpoints::{HttpConfig, PathSpec, ServiceReport};
+use scanner::scan;
+use scanner::target::Target;
 
 use crate::cli::Cli;
 
@@ -76,7 +75,7 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
             if !inspect {
                 continue;
             }
-            match at_http::inspect_service(&target.url_host(), op.port, op.http_tls, &cfg).await {
+            match endpoints::inspect_service(&target.url_host(), op.port, op.http_tls, &cfg).await {
                 Ok(r) => reports.push(r),
                 Err(e) => eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port),
             }
@@ -107,7 +106,7 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
 fn build_http_config(args: &Cli) -> anyhow::Result<HttpConfig> {
     let paths = match &args.paths {
         Some(file) => load_paths(file)?,
-        None => at_http::default_paths(),
+        None => endpoints::default_paths(),
     };
     Ok(HttpConfig {
         timeout: Duration::from_secs(args.http_timeout),
