@@ -153,3 +153,85 @@ pub struct ServiceReport {
     pub endpoints: Vec<Endpoint>,
 }
 
+fn build_client(cfg: &HttpConfig) -> anyhow::Result<Client> {
+    Ok(Client::builder()
+        .user_agent(cfg.user_agent.clone())
+        .timeout(cfg.timeout)
+        .connect_timeout(cfg.timeout)
+        .redirect(Policy::none())
+        .danger_accept_invalid_certs(!cfg.strict_tls)
+        .tcp_nodelay(true)
+        .build()?)
+}
+
+fn authority(host: &str, port: u16) -> String {
+    format!("{host}:{port}")
+}
+
+/// Decide whether a port speaks HTTP and over which scheme. `hint` is the
+/// catalog guess: `Some(true)` HTTPS, `Some(false)` HTTP, `None` unknown.
+async fn detect_scheme(
+    client: &Client,
+    host: &str,
+    port: u16,
+    hint: Option<bool>,
+) -> Option<&'static str> {
+    let order: &[&str] = match hint {
+        Some(true) => &["https"],
+        Some(false) => &["http"],
+        None => &["https", "http"],
+    };
+    for scheme in order {
+        let url = format!("{scheme}://{}/", authority(host, port));
+        // Any HTTP response (even an error status) proves the scheme speaks HTTP.
+        if client.get(&url).send().await.is_ok() {
+            return Some(scheme);
+        }
+    }
+    None
+}
+
+fn classify(status: StatusCode) -> Option<AuthState> {
+    match status.as_u16() {
+        404 | 410 => None, // does not exist here
+        s if (200..300).contains(&s) => Some(AuthState::Open),
+        401 | 403 => Some(AuthState::Protected),
+        429 => Some(AuthState::RateLimited),
+        s if (300..400).contains(&s) => Some(AuthState::Redirected),
+        _ => Some(AuthState::Present),
+    }
+}
+
+fn header_str(resp: &reqwest::Response, name: &str) -> Option<String> {
+    resp.headers()
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
+
+fn collect_rate_headers(resp: &reqwest::Response) -> RateLimitInfo {
+    let mut info = RateLimitInfo::default();
+    for name in RATE_LIMIT_HEADERS {
+        if resp.headers().contains_key(*name) {
+            info.headers_seen.push((*name).to_string());
+        }
+    }
+    info.retry_after = header_str(resp, "retry-after");
+    info
+}
+
+/// Send a small sequential burst to `url`, returning how many requests were
+/// sent and whether a `429` was observed. Stops early on the first throttle.
+async fn active_rate_probe(client: &Client, url: &str, count: usize) -> (usize, bool) {
+    let mut sent = 0;
+    for _ in 0..count {
+        sent += 1;
+        match client.get(url).send().await {
+            Ok(resp) if resp.status().as_u16() == 429 => return (sent, true),
+            Ok(_) => {}
+            Err(_) => return (sent, false),
+        }
+    }
+    (sent, false)
+}
+
