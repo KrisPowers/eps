@@ -13,3 +13,13 @@ pub struct KnownPort {
     pub http_tls: Option<bool>,
 }
 
+const fn p(port: u16, service: &'static str, http_tls: Option<bool>) -> KnownPort {
+    KnownPort {
+        port,
+        service,
+        http_tls,
+    }
+}
+
+/// Top ~120 commonly exposed ports, biased toward services an application
+/// engineer is likely to stand up or leave open by accident.
