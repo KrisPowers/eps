@@ -84,3 +84,74 @@ pub struct EndpointView {
 
 /// Non-HTTP services whose public exposure is usually a serious problem, with
 /// the severity to assign and a short rationale.
+fn risky_service(port: u16, _service: &str) -> Option<(Severity, &'static str)> {
+    let high = Severity::High;
+    let med = Severity::Medium;
+    match port {
+        3306 | 5432 | 1433 | 1521 => Some((high, "database directly reachable")),
+        6379 => Some((high, "Redis is unauthenticated by default")),
+        11211 => Some((high, "Memcached has no auth and is amplification-prone")),
+        27017 | 27018 | 28017 => Some((high, "MongoDB directly reachable")),
+        9200 | 9300 => Some((high, "Elasticsearch directly reachable")),
+        5984 => Some((high, "CouchDB directly reachable")),
+        7000 | 9042 => Some((high, "Cassandra directly reachable")),
+        2375 => Some((high, "Docker API grants remote root")),
+        2379 | 2380 => Some((high, "etcd holds cluster secrets")),
+        10250 => Some((high, "kubelet API can expose workloads")),
+        23 => Some((high, "Telnet is cleartext")),
+        3389 => Some((med, "RDP exposed to the network")),
+        5900 => Some((med, "VNC exposed to the network")),
+        445 | 139 => Some((med, "SMB exposed to the network")),
+        21 => Some((med, "FTP is cleartext")),
+        9092 => Some((med, "Kafka broker reachable")),
+        5672 => Some((med, "AMQP broker reachable")),
+        _ => None,
+    }
+}
+
+/// Build the prioritized finding list from raw scan data.
+pub fn build_findings(open_ports: &[OpenPort], services: &[ServiceReport]) -> Vec<Finding> {
+    let mut findings = Vec::new();
+
+    // 1. Exposed non-HTTP services of note.
+    for op in open_ports {
+        if op.http_tls.is_some() {
+            continue; // HTTP ports are covered by endpoint findings below.
+        }
+        if let Some((sev, why)) = risky_service(op.port, op.service) {
+            findings.push(Finding {
+                severity: sev,
+                title: format!("Exposed {} service", op.service),
+                location: format!("port {}", op.port),
+                detail: format!(
+                    "{why}. Confirm this port should be reachable from where you are scanning; restrict it to a trusted network or add authentication if not."
+                ),
+            });
+        }
+    }
+
+    // 2. Per-endpoint posture.
+    for svc in services {
+        for ep in &svc.endpoints {
+            findings.extend(endpoint_findings(svc, ep));
+        }
+
+        // Cleartext transport note, raised once per plaintext service that has
+        // any openly reachable endpoint.
+        if svc.reachable
+            && svc.scheme == "http"
+            && svc.endpoints.iter().any(|e| e.auth == AuthState::Open)
+        {
+            findings.push(Finding {
+                severity: Severity::Low,
+                title: "Cleartext HTTP service".to_string(),
+                location: format!("port {} (http)", svc.port),
+                detail: "Endpoints are served over plaintext HTTP; traffic and any tokens are exposed on the wire. Prefer HTTPS.".to_string(),
+            });
+        }
+    }
+
+    findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
+    findings
+}
+
