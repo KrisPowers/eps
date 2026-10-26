@@ -155,3 +155,77 @@ pub fn build_findings(open_ports: &[OpenPort], services: &[ServiceReport]) -> Ve
     findings
 }
 
+fn endpoint_findings(svc: &ServiceReport, ep: &Endpoint) -> Vec<Finding> {
+    let mut out = Vec::new();
+    let loc = format!("{} (port {})", ep.url, svc.port);
+
+    match ep.auth {
+        AuthState::Open if ep.sensitive => {
+            out.push(Finding {
+                severity: Severity::High,
+                title: format!("Unauthenticated sensitive endpoint: {}", ep.note),
+                location: loc.clone(),
+                detail: format!(
+                    "Returned {} with no authentication. This path commonly leaks configuration, internals, or control. Put it behind auth or stop exposing it.",
+                    ep.status
+                ),
+            });
+        }
+        AuthState::Open => {
+            // Non-sensitive open endpoint: note only the missing throttling, and
+            // only for API-ish surfaces, to keep health checks quiet.
+            if !ep.rate_limit.any_signal() && is_api_like(&ep.path) {
+                out.push(Finding {
+                    severity: Severity::Low,
+                    title: "No rate limiting advertised on open API endpoint".to_string(),
+                    location: loc.clone(),
+                    detail: "No RateLimit/Retry-After headers were returned. Verify throttling exists upstream to limit abuse.".to_string(),
+                });
+            }
+        }
+        AuthState::Protected if ep.sensitive => {
+            // Positive signal: a sensitive path is correctly gated.
+            let scheme = ep
+                .www_authenticate
+                .as_deref()
+                .map(|w| format!(" ({})", w.split(' ').next().unwrap_or(w)))
+                .unwrap_or_default();
+            out.push(Finding {
+                severity: Severity::Info,
+                title: format!("Sensitive endpoint is protected{scheme}: {}", ep.note),
+                location: loc.clone(),
+                detail: format!(
+                    "Returned {} without credentials - an auth gate is in place.",
+                    ep.status
+                ),
+            });
+        }
+        _ => {}
+    }
+
+    // If an active burst actually drew a 429, that's a good signal worth noting.
+    if let Some((sent, throttled)) = ep.rate_limit.active {
+        if !throttled {
+            out.push(Finding {
+                severity: Severity::Low,
+                title: "No throttling observed under burst".to_string(),
+                location: loc.clone(),
+                detail: format!(
+                    "Sent {sent} rapid requests to an open endpoint without being throttled (no 429). Confirm rate limiting is enforced."
+                ),
+            });
+        }
+    }
+
+    out
+}
+
+fn is_api_like(path: &str) -> bool {
+    let p = path.trim_start_matches('/');
+    p.is_empty()
+        || p.starts_with("api")
+        || p.starts_with('v')
+        || p.starts_with("graphql")
+        || p.starts_with("rest")
+}
+
