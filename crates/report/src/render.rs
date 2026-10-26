@@ -5,21 +5,13 @@ use std::io::IsTerminal;
 
 use endpoints::{AuthState, Endpoint, ServiceReport};
 
-use crate::{risky_service, Report, Severity};
+use crate::{risky_service, Report};
 
 /// Columns the output is laid out in.
 const WIDTH: usize = 78;
 
-/// Column the body of a finding is indented to, past its badge.
-const INDENT: usize = 10;
-
-/// Severities in the order they are counted, most severe first.
-const ORDER: [Severity; 4] = [
-    Severity::High,
-    Severity::Medium,
-    Severity::Low,
-    Severity::Info,
-];
+/// Column the body of a finding is indented to, under its title.
+const INDENT: usize = 4;
 
 /// Whether ANSI styling is emitted. Off when piped or when `NO_COLOR` is set.
 #[derive(Clone, Copy)]
@@ -110,45 +102,6 @@ fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
-fn tally(report: &Report, sev: Severity) -> usize {
-    let f = &report.findings;
-    f.iter().filter(|x| x.severity == sev).count()
-}
-
-/// Foreground for text tinted by severity.
-fn tint(sev: Severity) -> &'static str {
-    match sev {
-        Severity::High => "1;31",
-        Severity::Medium => "1;33",
-        Severity::Low => "1;34",
-        Severity::Info => "1;36",
-    }
-}
-
-fn sev_name(sev: Severity) -> &'static str {
-    match sev {
-        Severity::High => "high",
-        Severity::Medium => "med",
-        Severity::Low => "low",
-        Severity::Info => "info",
-    }
-}
-
-/// A fixed-width severity badge: a colored block, or `[HIGH]` without color.
-fn badge(row: &mut Row, sev: Severity) {
-    let (name, codes) = match sev {
-        Severity::High => ("HIGH", "1;97;41"),
-        Severity::Medium => ("MED", "1;30;43"),
-        Severity::Low => ("LOW", "1;97;44"),
-        Severity::Info => ("INFO", "1;30;46"),
-    };
-    if row.paint.0 {
-        row.add(codes, &format!(" {name:<4} "));
-    } else {
-        row.add("", &format!("[{name:<4}]"));
-    }
-}
-
 fn status_tint(status: u16) -> &'static str {
     match status {
         200..=299 => "32",
@@ -197,8 +150,9 @@ fn heading(paint: Paint, title: &str, aside: &str, out: &mut String) {
     row.finish(out);
 }
 
-/// The summary card: target and address, then the counts at a glance.
-fn card(paint: Paint, report: &Report, out: &mut String) {
+/// The summary card: target and address, then the counts at a glance. A
+/// pinned `port` is shown on the target and leaves the port count out.
+fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
     let inner = WIDTH - 4;
     let rule = "─".repeat(WIDTH - 2);
 
@@ -211,7 +165,12 @@ fn card(paint: Paint, report: &Report, out: &mut String) {
     } else {
         report.resolved_ip.as_str()
     };
-    let title = fit(&format!("@ {}", report.target), inner - cols(ip) - 1);
+    let target = match port {
+        Some(p) if report.target.contains(':') => format!("[{}]:{p}", report.target),
+        Some(p) => format!("{}:{p}", report.target),
+        None => report.target.clone(),
+    };
+    let title = fit(&format!("@ {target}"), inner - cols(ip) - 1);
     let mut head = Row::new(paint);
     head.add("2", "│ ");
     head.add("1", &title);
@@ -220,20 +179,18 @@ fn card(paint: Paint, report: &Report, out: &mut String) {
     head.add("2", " │");
     head.finish(out);
 
-    let ports = plural(report.open_ports.len(), "open port", "open ports");
-    let endpoints = plural(report.endpoints.len(), "endpoint", "endpoints");
     let mut counts = Row::new(paint);
     counts.add("2", "│ ");
-    counts.add("", &ports);
-    counts.add("2", "  ·  ");
+    if port.is_none() {
+        let ports = plural(report.open_ports.len(), "open port", "open ports");
+        counts.add("", &ports);
+        counts.add("2", "  ·  ");
+    }
+    let endpoints = plural(report.endpoints.len(), "endpoint", "endpoints");
     counts.add("", &endpoints);
     counts.add("2", "  ·  ");
-    for sev in ORDER {
-        let n = tally(report, sev);
-        let codes = if n > 0 { tint(sev) } else { "2" };
-        counts.add(codes, &format!("{n} {}", sev_name(sev)));
-        counts.add("", "  ");
-    }
+    let findings = plural(report.findings.len(), "finding", "findings");
+    counts.add("", &findings);
     counts.pad_to(WIDTH - 2);
     counts.add("2", " │");
     counts.finish(out);
@@ -243,7 +200,7 @@ fn card(paint: Paint, report: &Report, out: &mut String) {
     bottom.finish(out);
 }
 
-/// Open ports, with risky services tinted by severity and the reason beside.
+/// Open ports, with risky services highlighted and the reason beside.
 fn port_section(paint: Paint, report: &Report, out: &mut String) {
     heading(paint, "PORTS", "", out);
     if report.open_ports.is_empty() {
@@ -257,8 +214,8 @@ fn port_section(paint: Paint, report: &Report, out: &mut String) {
         row.add("1", &format!("  {:>5}", p.port));
         row.add("2", "/tcp   ");
         match risky_service(p.port, &p.service) {
-            Some((sev, why)) => {
-                row.add(tint(sev), &p.service);
+            Some((_, why)) => {
+                row.add("1;33", &p.service);
                 row.pad_to(32);
                 row.add("2", why);
             }
@@ -319,15 +276,14 @@ fn endpoint_section(paint: Paint, svc: &ServiceReport, out: &mut String) {
     }
 }
 
-/// Findings, most severe first: badge and title, location, wrapped detail.
+/// Findings: title, location, then the wrapped detail.
 fn finding_section(paint: Paint, report: &Report, out: &mut String) {
     heading(paint, "FINDINGS", "", out);
     if report.findings.is_empty() {
+        let clear = " Nothing notable. No risky services or open sensitive endpoints. ";
         let mut row = Row::new(paint);
-        row.add(
-            "32",
-            "  ✓ Nothing notable. No risky services or open sensitive endpoints.",
-        );
+        row.add("", "  ");
+        row.add("1;30;42", clear);
         row.finish(out);
         return;
     }
@@ -335,14 +291,9 @@ fn finding_section(paint: Paint, report: &Report, out: &mut String) {
         if i > 0 {
             out.push('\n');
         }
-        for (j, line) in wrap(&f.title, WIDTH - INDENT).iter().enumerate() {
+        for line in wrap(&f.title, WIDTH - 2) {
             let mut row = Row::new(paint);
-            if j == 0 {
-                row.add("", "  ");
-                badge(&mut row, f.severity);
-            }
-            row.pad_to(INDENT);
-            row.add("1", line);
+            row.add("1", &format!("  {line}"));
             row.finish(out);
         }
 
@@ -360,12 +311,15 @@ fn finding_section(paint: Paint, report: &Report, out: &mut String) {
     }
 }
 
-/// Render the report for a terminal.
-pub fn render_human(report: &Report, services: &[ServiceReport]) -> String {
+/// Render the report for a terminal. When the target pinned a `port`, the
+/// ports section is left out: the scan was for that port's endpoints.
+pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u16>) -> String {
     let paint = Paint::detect();
     let mut out = String::from("\n");
-    card(paint, report, &mut out);
-    port_section(paint, report, &mut out);
+    card(paint, report, port, &mut out);
+    if port.is_none() {
+        port_section(paint, report, &mut out);
+    }
     for svc in services {
         if svc.reachable && !svc.endpoints.is_empty() {
             endpoint_section(paint, svc, &mut out);
