@@ -106,3 +106,50 @@ IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
 | `--paths <FILE>` | Use a custom endpoint list (one path per line; `!` prefix marks a path sensitive). Replaces the built-in list. |
 | `--fail-on-high` | Exit `2` if any **HIGH** finding is reported - handy in CI gates. |
 
+## What it reports
+
+Findings are prioritized by potential impact:
+
+- **HIGH** - an unauthenticated **sensitive** endpoint (e.g. `/actuator/env`,
+  `/metrics`, `/.env`, `/.git/HEAD`), or an exposed high-risk service (Redis,
+  MongoDB, a database, the Docker API, etcd, kubelet, ...).
+- **MEDIUM** - exposed services like RDP, VNC, SMB, FTP, or message brokers.
+- **LOW** - cleartext HTTP carrying open endpoints; open API surfaces with no
+  rate-limit headers; no throttling observed under an opt-in burst.
+- **INFO** - positive signals, e.g. a sensitive path that is correctly behind auth.
+
+`at` reports *exposure and posture*, never intent - it can't know whether a given
+host is meant to be public. Severities are there to help you triage; the call is
+yours.
+
+### Example
+
+```
+@ 10.0.0.42 (10.0.0.42)
+
+Open ports
+     22/tcp  ssh
+   8080/tcp  http-proxy
+
+Endpoints on http:8080 (http)
+  200  OPEN (no auth) no-ratelimit /actuator/env  Actuator environment (secrets risk)
+  401  protected      no-ratelimit /admin         admin console   challenge: Basic
+  200  OPEN (no auth) rate-limited /api            API root
+
+Findings
+  HIGH  Unauthenticated sensitive endpoint: Actuator environment (secrets risk)
+        http://10.0.0.42:8080/actuator/env (port 8080)
+        Returned 200 with no authentication. ...
+  ...
+
+Summary: 1 high | 0 medium | 1 low. Read-only scan - exposure is reported, not judged.
+```
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Ran successfully. |
+| `1` | Error (bad target, resolution failure, ...). |
+| `2` | Ran successfully **and** a HIGH finding was reported (only with `--fail-on-high`). |
+
