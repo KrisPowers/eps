@@ -131,3 +131,32 @@ fn build_http_config(args: &Cli) -> anyhow::Result<HttpConfig> {
 
 /// Load a custom path list: one path per line, `#` comments ignored, a leading
 /// `!` marks the path sensitive.
+fn load_paths(file: &str) -> anyhow::Result<Vec<PathSpec>> {
+    let contents = std::fs::read_to_string(file)
+        .map_err(|e| anyhow::anyhow!("reading paths file `{file}`: {e}"))?;
+    let mut specs = Vec::new();
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (sensitive, raw) = match line.strip_prefix('!') {
+            Some(rest) => (true, rest.trim()),
+            None => (false, line),
+        };
+        let path = if raw.starts_with('/') {
+            raw.to_string()
+        } else {
+            format!("/{raw}")
+        };
+        specs.push(PathSpec {
+            path,
+            sensitive,
+            note: "custom".to_string(),
+        });
+    }
+    if specs.is_empty() {
+        anyhow::bail!("paths file `{file}` contained no usable paths");
+    }
+    Ok(specs)
+}
