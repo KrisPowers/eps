@@ -25,3 +25,12 @@ pub enum PortState {
 
 /// A port that responded as open, with its best-guess service label.
 #[derive(Debug, Clone)]
+pub struct OpenPort {
+    pub port: u16,
+    pub service: &'static str,
+    /// HTTP hint from the catalog: `Some(true)` HTTPS, `Some(false)` HTTP.
+    pub http_tls: Option<bool>,
+}
+
+/// Resolve `host` to a set of socket addresses on an arbitrary port, returning
+/// the distinct IPs the system resolver hands back.
