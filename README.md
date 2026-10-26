@@ -126,11 +126,12 @@ yours.
 
 ### Example
 
-Each endpoint gets a card: its status, path and note, then a highlighted block
-per security control (auth, JWT, rate limiting, HTTPS). Green means the control
-is configured, yellow configured but bypassable or weakened, red not
-configured, and white that the response does not show either way. Piped output
-or `NO_COLOR` drops the color and keeps the layout. When the target pins a port
+Each endpoint is one line: its status, a block per security control (`AUTH`,
+`JWT`, `RATE`, `HTTPS`), its path and note. The block's color is the verdict:
+green configured, yellow configured but bypassable or weakened, red not
+configured, white when the response does not show either way. Piped output or
+`NO_COLOR` drops the color and marks each block `+`, `~`, `-` or `?` instead,
+as in the example below. When the target pins a port
 (`@ host:8080`), the ports section is left out and only that port's endpoints
 are shown.
 
@@ -145,16 +146,11 @@ are shown.
    8080/tcp   http-proxy
 
   ENDPOINTS  http://api.internal:8080 ────────────────────────────────────────
-  [configured] [insecure] [not configured] [not shown]
+  [configured+] [insecure~] [not configured-] [not shown?]
 
-  200  /actuator/env  Actuator environment (secrets risk)
-       [AUTH none     ] [JWT none  ] [RATE none        ] [HTTPS plain]
-
-  401  /admin  admin console  Basic realm="admin"
-       [AUTH Basic    ] [JWT none  ] [RATE none        ] [HTTPS plain]
-
-  200  /api  API root  nginx
-       [AUTH none     ] [JWT none  ] [RATE advertised  ] [HTTPS plain]
+  200  [AUTH-] [JWT-] [RATE-] [HTTPS-]  /actuator/env
+  401  [AUTH~] [JWT-] [RATE-] [HTTPS-]  /admin         admin console
+  200  [AUTH-] [JWT-] [RATE+] [HTTPS-]  /api           API root
 
   Read-only scan - exposure is reported, not judged.
 ```

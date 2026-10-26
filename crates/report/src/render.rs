@@ -107,24 +107,34 @@ enum Posture {
 }
 
 impl Posture {
+    /// Background highlight. Text is never bold: bold black renders gray.
     fn codes(self) -> &'static str {
         match self {
-            Posture::Configured => "1;30;42",
-            Posture::Insecure => "1;30;43",
-            Posture::Missing => "1;97;41",
-            Posture::Unknown => "1;30;47",
+            Posture::Configured => "30;42",
+            Posture::Insecure => "30;43",
+            Posture::Missing => "97;41",
+            Posture::Unknown => "30;107",
+        }
+    }
+
+    /// Stands in for the color when output is piped.
+    fn mark(self) -> char {
+        match self {
+            Posture::Configured => '+',
+            Posture::Insecure => '~',
+            Posture::Missing => '-',
+            Posture::Unknown => '?',
         }
     }
 }
 
-/// A highlighted block in the color of `posture`, padded to `width` so
-/// blocks line up: ` AUTH Basic `, or `[AUTH Basic]` without color.
-fn chip(row: &mut Row, posture: Posture, text: &str, width: usize) {
-    let inner = width.saturating_sub(2);
+/// A block highlighted in the color of `posture`: ` AUTH `, or `[AUTH+]`
+/// without color.
+fn chip(row: &mut Row, posture: Posture, text: &str) {
     if row.paint.0 {
-        row.add(posture.codes(), &format!(" {text:<inner$} "));
+        row.add(posture.codes(), &format!(" {text} "));
     } else {
-        row.add("", &format!("[{text:<inner$}]"));
+        row.add("", &format!("[{text}{}]", posture.mark()));
     }
 }
 
@@ -146,74 +156,48 @@ fn scheme_is(ep: &Endpoint, name: &str) -> bool {
     challenge(ep).is_some_and(|s| s.eq_ignore_ascii_case(name))
 }
 
-/// The credential gate an endpoint answered with, if any. Basic over plain
-/// HTTP counts as insecure: the password crosses the wire readable.
-fn auth(ep: &Endpoint) -> (Posture, String) {
+/// A credential gate (401/403 or a login redirect). Basic over plain HTTP is
+/// insecure: the password crosses the wire readable.
+fn auth(ep: &Endpoint) -> Posture {
     match ep.auth {
-        AuthState::Protected => {
-            let gate = match challenge(ep) {
-                Some(scheme) => scheme.to_string(),
-                None if ep.status == 403 => "forbidden".to_string(),
-                None => "required".to_string(),
-            };
-            let posture = if !ep.tls && scheme_is(ep, "basic") {
-                Posture::Insecure
-            } else {
-                Posture::Configured
-            };
-            (posture, gate)
-        }
-        AuthState::Redirected if is_login_redirect(ep) => {
-            (Posture::Configured, "login".to_string())
-        }
-        AuthState::Open => (Posture::Missing, "none".to_string()),
-        _ => (Posture::Unknown, "n/a".to_string()),
+        AuthState::Protected if !ep.tls && scheme_is(ep, "basic") => Posture::Insecure,
+        AuthState::Protected => Posture::Configured,
+        AuthState::Redirected if is_login_redirect(ep) => Posture::Configured,
+        AuthState::Open => Posture::Missing,
+        _ => Posture::Unknown,
     }
 }
 
 /// Bearer-token (JWT) auth, insecure when the token travels in the clear.
-fn jwt(ep: &Endpoint) -> (Posture, &'static str) {
+fn jwt(ep: &Endpoint) -> Posture {
     if !scheme_is(ep, "bearer") {
-        (Posture::Missing, "none")
+        Posture::Missing
     } else if ep.tls {
-        (Posture::Configured, "Bearer")
+        Posture::Configured
     } else {
-        (Posture::Insecure, "Bearer")
+        Posture::Insecure
     }
 }
 
-/// Rate limiting: enforced (a 429 seen), advertised by headers, or
-/// advertised but not holding under the opt-in burst.
-fn rate(ep: &Endpoint) -> (Posture, &'static str) {
+/// Rate limiting: enforced (a 429 seen) or advertised by headers, insecure
+/// when advertised but not holding under the opt-in burst.
+fn rate(ep: &Endpoint) -> Posture {
     let rl = &ep.rate_limit;
     let advertised = !rl.headers_seen.is_empty() || rl.retry_after.is_some();
     match rl.active {
-        _ if ep.auth == AuthState::RateLimited => (Posture::Configured, "enforced"),
-        Some((_, true)) => (Posture::Configured, "enforced"),
-        Some((_, false)) if advertised => (Posture::Insecure, "not enforced"),
-        None if advertised => (Posture::Configured, "advertised"),
-        _ => (Posture::Missing, "none"),
+        _ if ep.auth == AuthState::RateLimited => Posture::Configured,
+        Some((_, true)) => Posture::Configured,
+        Some((_, false)) if advertised => Posture::Insecure,
+        None if advertised => Posture::Configured,
+        _ => Posture::Missing,
     }
 }
 
-fn https(ep: &Endpoint) -> (Posture, &'static str) {
+fn https(ep: &Endpoint) -> Posture {
     if ep.tls {
-        (Posture::Configured, "TLS")
+        Posture::Configured
     } else {
-        (Posture::Missing, "plain")
-    }
-}
-
-/// Context shown after an endpoint's note: where it redirects, the auth
-/// challenge it sent, or the server that answered.
-fn extra(ep: &Endpoint) -> Option<String> {
-    match ep.auth {
-        AuthState::Redirected => ep.location.as_ref().map(|loc| format!("→ {loc}")),
-        AuthState::Protected => ep
-            .www_authenticate
-            .as_deref()
-            .map(|w| w.split(',').next().unwrap_or(w).to_string()),
-        _ => ep.server.clone(),
+        Posture::Missing
     }
 }
 
@@ -311,8 +295,8 @@ fn port_section(paint: Paint, report: &Report, out: &mut String) {
     }
 }
 
-/// One HTTP service: a legend, then a card per endpoint with its status,
-/// path and note over a verdict block for each security control.
+/// One HTTP service: a legend, then a line per endpoint with its status, a
+/// colored block for each security control, its path and note.
 fn endpoint_section(paint: Paint, svc: &ServiceReport, out: &mut String) {
     let base = svc
         .endpoints
@@ -324,44 +308,45 @@ fn endpoint_section(paint: Paint, svc: &ServiceReport, out: &mut String) {
 
     let mut legend = Row::new(paint);
     legend.add("", "  ");
-    chip(&mut legend, Posture::Configured, "configured", 12);
+    chip(&mut legend, Posture::Configured, "configured");
     legend.add("", " ");
-    chip(&mut legend, Posture::Insecure, "insecure", 10);
+    chip(&mut legend, Posture::Insecure, "insecure");
     legend.add("", " ");
-    chip(&mut legend, Posture::Missing, "not configured", 16);
+    chip(&mut legend, Posture::Missing, "not configured");
     legend.add("", " ");
-    chip(&mut legend, Posture::Unknown, "not shown", 11);
+    chip(&mut legend, Posture::Unknown, "not shown");
     legend.finish(out);
+    out.push('\n');
+
+    let path_width = svc
+        .endpoints
+        .iter()
+        .map(|ep| cols(&ep.path))
+        .max()
+        .unwrap_or(0)
+        .min(24);
 
     for ep in &svc.endpoints {
-        out.push('\n');
-        let mut head = Row::new(paint);
-        head.add("", "  ");
-        head.add(status_tint(ep.status), &ep.status.to_string());
-        head.add("", "  ");
-        head.add("1", &fit(&ep.path, 40));
-        head.add("", "  ");
-        let note = fit(&ep.note, WIDTH.saturating_sub(head.width));
-        head.add("", &note);
-        if let Some(extra) = extra(ep) {
-            let room = WIDTH.saturating_sub(head.width);
-            head.add(ACCENT, &fit(&format!("  {extra}"), room));
-        }
-        head.finish(out);
-
-        let (auth_posture, gate) = auth(ep);
-        let (jwt_posture, jwt_label) = jwt(ep);
-        let (rate_posture, rate_label) = rate(ep);
-        let (tls_posture, tls_label) = https(ep);
         let mut row = Row::new(paint);
-        row.pad_to(7);
-        chip(&mut row, auth_posture, &format!("AUTH {gate}"), 16);
+        row.add("", "  ");
+        row.add(status_tint(ep.status), &ep.status.to_string());
+        row.add("", "  ");
+        chip(&mut row, auth(ep), "AUTH");
         row.add("", " ");
-        chip(&mut row, jwt_posture, &format!("JWT {jwt_label}"), 12);
+        chip(&mut row, jwt(ep), "JWT");
         row.add("", " ");
-        chip(&mut row, rate_posture, &format!("RATE {rate_label}"), 19);
+        chip(&mut row, rate(ep), "RATE");
         row.add("", " ");
-        chip(&mut row, tls_posture, &format!("HTTPS {tls_label}"), 13);
+        chip(&mut row, https(ep), "HTTPS");
+        row.add("", "  ");
+
+        let end = row.width + path_width + 2;
+        row.add("1", &fit(&ep.path, path_width));
+        row.pad_to(end);
+        // The note only goes in whole; a cut-off note reads as noise.
+        if cols(&ep.note) <= WIDTH.saturating_sub(row.width) {
+            row.add("", &ep.note);
+        }
         row.finish(out);
     }
 }
@@ -415,10 +400,9 @@ mod tests {
     }
 
     #[test]
-    fn chips_pad_to_width() {
+    fn chips_mark_posture_without_color() {
         let mut row = Row::new(Paint(false));
-        chip(&mut row, Posture::Missing, "JWT none", 12);
-        assert_eq!(row.text, "[JWT none  ]");
-        assert_eq!(row.width, 12);
+        chip(&mut row, Posture::Missing, "JWT");
+        assert_eq!(row.text, "[JWT-]");
     }
 }
