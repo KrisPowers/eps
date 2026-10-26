@@ -282,3 +282,114 @@ pub fn assemble(
 }
 
 /// Render the report as readable text for a terminal.
+pub fn render_human(report: &Report, services: &[ServiceReport]) -> String {
+    let color = use_color();
+    let bold = if color { "\x1b[1m" } else { "" };
+    let dim = if color { "\x1b[2m" } else { "" };
+    let reset = if color { "\x1b[0m" } else { "" };
+
+    let mut s = String::new();
+
+    s.push_str(&format!(
+        "\n{bold}@ {}{reset} {dim}({}){reset}\n",
+        report.target, report.resolved_ip
+    ));
+
+    // Open ports.
+    if report.open_ports.is_empty() {
+        s.push_str(&format!(
+            "\n  {dim}No open ports found in the scanned range.{reset}\n"
+        ));
+    } else {
+        s.push_str(&format!("\n{bold}Open ports{reset}\n"));
+        for p in &report.open_ports {
+            s.push_str(&format!("  {:>5}/tcp  {}\n", p.port, p.service));
+        }
+    }
+
+    // Endpoints per service.
+    for svc in services {
+        if !svc.reachable || svc.endpoints.is_empty() {
+            continue;
+        }
+        s.push_str(&format!(
+            "\n{bold}Endpoints on {}:{}{reset} {dim}({}){reset}\n",
+            svc.scheme, svc.port, svc.scheme
+        ));
+        for ep in &svc.endpoints {
+            let auth_col = if color {
+                match ep.auth {
+                    AuthState::Open if ep.sensitive => "\x1b[31m",
+                    AuthState::Open => "\x1b[33m",
+                    AuthState::Protected => "\x1b[32m",
+                    _ => "\x1b[2m",
+                }
+            } else {
+                ""
+            };
+            let rl = if ep.rate_limit.any_signal() {
+                "rate-limited"
+            } else {
+                "no-ratelimit"
+            };
+            // Extra context: redirect target, auth challenge scheme, or server.
+            let mut extra = String::new();
+            if ep.auth == AuthState::Redirected {
+                if let Some(loc) = &ep.location {
+                    extra = format!("-> {loc}");
+                }
+            } else if ep.auth == AuthState::Protected {
+                if let Some(w) = &ep.www_authenticate {
+                    extra = format!("challenge: {}", w.split(',').next().unwrap_or(w));
+                }
+            } else if let Some(srv) = &ep.server {
+                extra = srv.clone();
+            }
+            s.push_str(&format!(
+                "  {:>3}  {auth_col}{:<14}{reset} {:<12} {dim}{}{reset}  {}  {dim}{}{reset}\n",
+                ep.status,
+                ep.auth.label(),
+                rl,
+                ep.path,
+                ep.note,
+                extra,
+            ));
+        }
+    }
+
+    // Findings.
+    s.push_str(&format!("\n{bold}Findings{reset}\n"));
+    if report.findings.is_empty() {
+        s.push_str(&format!(
+            "  {dim}Nothing notable - no exposed risky services or unauthenticated sensitive endpoints.{reset}\n"
+        ));
+    } else {
+        for f in &report.findings {
+            let col = if color { f.severity.color() } else { "" };
+            s.push_str(&format!(
+                "  {col}{}{reset}  {bold}{}{reset}\n        {dim}{}{reset}\n        {}\n",
+                f.severity.label(),
+                f.title,
+                f.location,
+                f.detail,
+            ));
+        }
+    }
+
+    // Summary counts.
+    let (mut high, mut med, mut low) = (0, 0, 0);
+    for f in &report.findings {
+        match f.severity {
+            Severity::High => high += 1,
+            Severity::Medium => med += 1,
+            Severity::Low => low += 1,
+            Severity::Info => {}
+        }
+    }
+    s.push_str(&format!(
+        "\n{dim}Summary: {high} high | {med} medium | {low} low. Read-only scan - exposure is reported, not judged.{reset}\n"
+    ));
+
+    s
+}
+
