@@ -47,7 +47,8 @@ irm https://at.krispowers.dev/install.ps1 | iex
 **Homebrew:**
 
 ```sh
-brew install krispowers/tap/at
+brew tap krispowers/at https://github.com/krispowers/at
+brew install krispowers/at/at
 ```
 
 **Prebuilt binaries:** download the archive for your platform from the
