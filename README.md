@@ -153,3 +153,9 @@ Summary: 1 high | 0 medium | 1 low. Read-only scan - exposure is reported, not j
 | `1` | Error (bad target, resolution failure, ...). |
 | `2` | Ran successfully **and** a HIGH finding was reported (only with `--fail-on-high`). |
 
+## Authorized use only
+
+Scan only hosts you own or are **explicitly authorized** to assess. Port scanning
+and endpoint probing against systems you don't control may be unlawful and against
+provider terms, even though `at` is read-only. You are responsible for how you use it.
+
