@@ -132,10 +132,14 @@ drops the color and keeps the layout. When the target pins a port
 (`@ host:8080`), the ports section is left out and only that port's endpoints
 are shown.
 
+The security section gives each control (authentication, JWT, rate limiting,
+HTTPS) a highlighted verdict: green when it is configured, yellow when it is
+configured but bypassable or weakened, red when it is not configured.
+
 ```
 ╭────────────────────────────────────────────────────────────────────────────╮
 │ @ api.internal                                                   10.0.0.42 │
-│ 2 open ports  ·  3 endpoints  ·  3 findings                                │
+│ 2 open ports  ·  3 endpoints                                               │
 ╰────────────────────────────────────────────────────────────────────────────╯
 
   PORTS ──────────────────────────────────────────────────────────────────────
@@ -147,14 +151,20 @@ are shown.
   401  PROTECTED  no limit  /admin         admin console  Basic
   200  OPEN       limited   /api           API root
 
-  FINDINGS ───────────────────────────────────────────────────────────────────
-  Unauthenticated sensitive endpoint: Actuator environment (secrets risk)
-    http://api.internal:8080/actuator/env (port 8080)
-    Returned 200 with no authentication. This path commonly leaks
-    configuration, internals, or control. Put it behind auth or stop exposing
-    it.
+  SECURITY ───────────────────────────────────────────────────────────────────
+  [INSECURE      ]  Authentication
+                    1 endpoint asks for credentials (Basic), but these
+                    sensitive paths answer without: /actuator/env.
 
-  ...
+  [NOT CONFIGURED]  JWT
+                    No endpoint asks for a Bearer token.
+
+  [CONFIGURED    ]  Rate limiting
+                    Limits on /api. Every open API endpoint has one.
+
+  [NOT CONFIGURED]  HTTPS
+                    Plain HTTP only on port 8080. Passwords and tokens cross
+                    the wire unencrypted.
 
   Read-only scan - exposure is reported, not judged.
 ```

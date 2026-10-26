@@ -1,17 +1,15 @@
 //! Terminal rendering of a report: a summary card up top, then ports,
-//! endpoints and findings as aligned, color-coded sections.
+//! endpoints and a per-control security verdict as aligned, color-coded
+//! sections.
 
 use std::io::IsTerminal;
 
 use endpoints::{AuthState, Endpoint, ServiceReport};
 
-use crate::{risky_service, Report};
+use crate::{is_api_like, risky_service, Report};
 
 /// Columns the output is laid out in.
 const WIDTH: usize = 78;
-
-/// Column the body of a finding is indented to, under its title.
-const INDENT: usize = 4;
 
 /// Whether ANSI styling is emitted. Off when piped or when `NO_COLOR` is set.
 #[derive(Clone, Copy)]
@@ -188,9 +186,6 @@ fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
     }
     let endpoints = plural(report.endpoints.len(), "endpoint", "endpoints");
     counts.add("", &endpoints);
-    counts.add("2", "  ·  ");
-    let findings = plural(report.findings.len(), "finding", "findings");
-    counts.add("", &findings);
     counts.pad_to(WIDTH - 2);
     counts.add("2", " │");
     counts.finish(out);
@@ -276,35 +271,240 @@ fn endpoint_section(paint: Paint, svc: &ServiceReport, out: &mut String) {
     }
 }
 
-/// Findings: title, location, then the wrapped detail.
-fn finding_section(paint: Paint, report: &Report, out: &mut String) {
-    heading(paint, "FINDINGS", "", out);
-    if report.findings.is_empty() {
-        let clear = " Nothing notable. No risky services or open sensitive endpoints. ";
+/// How far a security control is set up, as far as the scan can see.
+#[derive(Clone, Copy)]
+enum Posture {
+    /// Set up and holding.
+    Configured,
+    /// Set up, but bypassable or weakened.
+    Insecure,
+    /// Not set up at all.
+    Missing,
+}
+
+/// The highlighted verdict block: green, yellow or red.
+fn chip(row: &mut Row, posture: Posture) {
+    let (label, codes) = match posture {
+        Posture::Configured => ("CONFIGURED", "1;30;42"),
+        Posture::Insecure => ("INSECURE", "1;30;43"),
+        Posture::Missing => ("NOT CONFIGURED", "1;97;41"),
+    };
+    if row.paint.0 {
+        row.add(codes, &format!(" {label:<14} "));
+    } else {
+        row.add("", &format!("[{label:<14}]"));
+    }
+}
+
+/// Redirect targets that mean "go log in first".
+const LOGIN_WORDS: &[&str] = &["login", "signin", "sign-in", "auth", "sso"];
+
+fn is_login_redirect(ep: &Endpoint) -> bool {
+    let to = ep.location.as_deref().unwrap_or("").to_ascii_lowercase();
+    ep.auth == AuthState::Redirected && LOGIN_WORDS.iter().any(|w| to.contains(w))
+}
+
+/// The scheme named in an endpoint's auth challenge, e.g. `Basic`.
+fn challenge(ep: &Endpoint) -> Option<&str> {
+    let w = ep.www_authenticate.as_deref()?;
+    w.split_whitespace().next()
+}
+
+fn scheme_is(ep: &Endpoint, name: &str) -> bool {
+    challenge(ep).is_some_and(|s| s.eq_ignore_ascii_case(name))
+}
+
+/// Paths joined for a sentence, cut to the first few.
+fn paths(eps: &[&Endpoint]) -> String {
+    let shown: Vec<&str> = eps.iter().take(5).map(|ep| ep.path.as_str()).collect();
+    let mut s = shown.join(", ");
+    if eps.len() > 5 {
+        s.push_str(&format!(" and {} more", eps.len() - 5));
+    }
+    s
+}
+
+/// Credential gates (401/403 or a login redirect), and whether any
+/// sensitive path slips past them.
+fn authentication(eps: &[&Endpoint]) -> (Posture, String) {
+    let gated: Vec<&Endpoint> = eps
+        .iter()
+        .copied()
+        .filter(|ep| ep.auth == AuthState::Protected || is_login_redirect(ep))
+        .collect();
+    let exposed: Vec<&Endpoint> = eps
+        .iter()
+        .copied()
+        .filter(|ep| ep.auth == AuthState::Open && ep.sensitive)
+        .collect();
+
+    if gated.is_empty() {
+        let mut text = "No endpoint asks for credentials.".to_string();
+        if !exposed.is_empty() {
+            let list = paths(&exposed);
+            text.push_str(&format!(" Sensitive paths answer openly: {list}."));
+        }
+        return (Posture::Missing, text);
+    }
+
+    let mut schemes: Vec<&str> = gated.iter().filter_map(|ep| challenge(ep)).collect();
+    schemes.sort_unstable();
+    schemes.dedup();
+    let via = if schemes.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", schemes.join(", "))
+    };
+    let asks = plural(gated.len(), "endpoint asks", "endpoints ask");
+    let basic_plain = gated.iter().any(|ep| !ep.tls && scheme_is(ep, "basic"));
+
+    if !exposed.is_empty() {
+        let list = paths(&exposed);
+        let text = format!(
+            "{asks} for credentials{via}, but these sensitive paths answer without: {list}."
+        );
+        (Posture::Insecure, text)
+    } else if basic_plain {
+        let text = format!(
+            "{asks} for credentials{via}, but Basic over plain HTTP sends passwords in the clear."
+        );
+        (Posture::Insecure, text)
+    } else {
+        let text = format!("{asks} for credentials{via}, and every sensitive path found is gated.");
+        (Posture::Configured, text)
+    }
+}
+
+/// Bearer-token (JWT) challenges, and whether tokens travel encrypted.
+fn jwt(eps: &[&Endpoint]) -> (Posture, String) {
+    let bearer: Vec<&Endpoint> = eps
+        .iter()
+        .copied()
+        .filter(|ep| scheme_is(ep, "bearer"))
+        .collect();
+    if bearer.is_empty() {
+        let text = "No endpoint asks for a Bearer token.".to_string();
+        return (Posture::Missing, text);
+    }
+    let list = paths(&bearer);
+    if bearer.iter().any(|ep| !ep.tls) {
+        let text = format!(
+            "Bearer tokens required on {list}, but sent over plain HTTP, readable on the wire."
+        );
+        (Posture::Insecure, text)
+    } else {
+        let text = format!("Bearer tokens required on {list}, over HTTPS.");
+        (Posture::Configured, text)
+    }
+}
+
+/// Advertised or enforced limits, open API endpoints without one, and
+/// limits that did not hold under the opt-in burst.
+fn rate_limiting(eps: &[&Endpoint]) -> (Posture, String) {
+    let limited: Vec<&Endpoint> = eps
+        .iter()
+        .copied()
+        .filter(|ep| ep.rate_limit.any_signal())
+        .collect();
+    if limited.is_empty() {
+        let text = "No endpoint advertises or enforces a rate limit.".to_string();
+        return (Posture::Missing, text);
+    }
+    let unlimited: Vec<&Endpoint> = eps
+        .iter()
+        .copied()
+        .filter(|ep| ep.auth == AuthState::Open && is_api_like(&ep.path))
+        .filter(|ep| !ep.rate_limit.any_signal())
+        .collect();
+    let unenforced: Vec<&Endpoint> = eps
+        .iter()
+        .copied()
+        .filter(|ep| matches!(ep.rate_limit.active, Some((_, false))))
+        .collect();
+
+    let mut text = format!("Limits on {}.", paths(&limited));
+    if !unlimited.is_empty() {
+        let list = paths(&unlimited);
+        text.push_str(&format!(" Open API endpoints with none: {list}."));
+    }
+    if !unenforced.is_empty() {
+        let list = paths(&unenforced);
+        text.push_str(&format!(" Not throttled under a burst: {list}."));
+    }
+    if unlimited.is_empty() && unenforced.is_empty() {
+        text.push_str(" Every open API endpoint has one.");
+        (Posture::Configured, text)
+    } else {
+        (Posture::Insecure, text)
+    }
+}
+
+/// Whether the HTTP services are served over TLS.
+fn transport(services: &[ServiceReport]) -> (Posture, String) {
+    let served: Vec<&ServiceReport> = services
+        .iter()
+        .filter(|s| s.reachable && !s.endpoints.is_empty())
+        .collect();
+    let plain: Vec<String> = served
+        .iter()
+        .filter(|s| s.scheme == "http")
+        .map(|s| s.port.to_string())
+        .collect();
+    if plain.is_empty() {
+        let text = "Every HTTP service is served over TLS.".to_string();
+        return (Posture::Configured, text);
+    }
+    let ports = plain.join(", ");
+    if plain.len() == served.len() {
+        let text = format!(
+            "Plain HTTP only on port {ports}. Passwords and tokens cross the wire unencrypted."
+        );
+        (Posture::Missing, text)
+    } else {
+        let text = format!("TLS on some ports, but plain HTTP on port {ports}.");
+        (Posture::Insecure, text)
+    }
+}
+
+/// Column a control's description starts at, past its verdict block.
+const BODY: usize = 20;
+
+/// Each security control with a highlighted verdict and what was seen.
+fn security_section(paint: Paint, services: &[ServiceReport], out: &mut String) {
+    heading(paint, "SECURITY", "", out);
+    let eps: Vec<&Endpoint> = services
+        .iter()
+        .filter(|s| s.reachable)
+        .flat_map(|s| s.endpoints.iter())
+        .collect();
+    if eps.is_empty() {
         let mut row = Row::new(paint);
         row.add("", "  ");
-        row.add("1;30;42", clear);
+        row.add("1;30;47", " No HTTP endpoints found to assess. ");
         row.finish(out);
         return;
     }
-    for (i, f) in report.findings.iter().enumerate() {
+
+    let controls = [
+        ("Authentication", authentication(&eps)),
+        ("JWT", jwt(&eps)),
+        ("Rate limiting", rate_limiting(&eps)),
+        ("HTTPS", transport(services)),
+    ];
+    for (i, (name, (posture, text))) in controls.iter().enumerate() {
         if i > 0 {
             out.push('\n');
         }
-        for line in wrap(&f.title, WIDTH - 2) {
-            let mut row = Row::new(paint);
-            row.add("1", &format!("  {line}"));
-            row.finish(out);
-        }
-
         let mut row = Row::new(paint);
-        row.pad_to(INDENT);
-        row.add("2", &fit(&f.location, WIDTH - INDENT));
+        row.add("", "  ");
+        chip(&mut row, *posture);
+        row.add("", "  ");
+        row.add("1", name);
         row.finish(out);
 
-        for line in wrap(&f.detail, WIDTH - INDENT) {
+        for line in wrap(text, WIDTH - BODY) {
             let mut row = Row::new(paint);
-            row.pad_to(INDENT);
+            row.pad_to(BODY);
             row.add("", &line);
             row.finish(out);
         }
@@ -325,7 +525,7 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
             endpoint_section(paint, svc, &mut out);
         }
     }
-    finding_section(paint, report, &mut out);
+    security_section(paint, services, &mut out);
 
     let footer = "  Read-only scan - exposure is reported, not judged.";
     let mut row = Row::new(paint);
