@@ -190,6 +190,22 @@ Workspace layout:
 - `crates/report` - severity model and text/JSON rendering.
 - `crates/cli` - the CLI binary, installed as `@`.
 - `Formula/` - the Homebrew formula.
+- `testbed/` - a local target to scan (see below).
+
+### Testbed
+
+`testbed/server.py` (Python 3, standard library only) serves conventional
+endpoints behind different setups: open, HTTP Basic, Bearer JWT, forbidden,
+login redirects, advertised and enforced rate limits, and sensitive paths left
+open. A fake Redis listens on `6379` so a full scan has a risky service to show.
+Nothing behind the endpoints is real.
+
+```sh
+python testbed/server.py              # HTTP on 127.0.0.1:8080
+@ localhost:8080                      # endpoints on the testbed
+@ localhost:8080 --probe-rate-limit   # /v1 throttles after 5 requests in 10s
+@ localhost                           # full scan, picks up the fake Redis
+```
 
 ## License
 
