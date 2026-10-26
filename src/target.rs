@@ -104,3 +104,64 @@ fn parse_port(p: &str) -> Result<u16, String> {
         })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ipv4_no_port() {
+        let t = Target::parse("@192.168.1.10").unwrap();
+        assert_eq!(t.host, "192.168.1.10");
+        assert_eq!(t.port, None);
+        assert!(!t.is_ipv6);
+    }
+
+    #[test]
+    fn ipv4_with_port() {
+        let t = Target::parse("@192.168.1.10:8080").unwrap();
+        assert_eq!(t.host, "192.168.1.10");
+        assert_eq!(t.port, Some(8080));
+    }
+
+    #[test]
+    fn prefix_is_optional() {
+        assert_eq!(Target::parse("10.0.0.1").unwrap().host, "10.0.0.1");
+    }
+
+    #[test]
+    fn hostname() {
+        let t = Target::parse("@example.internal:443").unwrap();
+        assert_eq!(t.host, "example.internal");
+        assert_eq!(t.port, Some(443));
+        assert!(!t.is_ipv6);
+    }
+
+    #[test]
+    fn bracketed_ipv6_with_port() {
+        let t = Target::parse("@[2001:db8::1]:443").unwrap();
+        assert_eq!(t.host, "2001:db8::1");
+        assert_eq!(t.port, Some(443));
+        assert!(t.is_ipv6);
+        assert_eq!(t.url_host(), "[2001:db8::1]");
+    }
+
+    #[test]
+    fn bare_ipv6_no_port() {
+        let t = Target::parse("@2001:db8::1").unwrap();
+        assert!(t.is_ipv6);
+        assert_eq!(t.port, None);
+    }
+
+    #[test]
+    fn rejects_bad_port() {
+        assert!(Target::parse("@10.0.0.1:0").is_err());
+        assert!(Target::parse("@10.0.0.1:70000").is_err());
+        assert!(Target::parse("@10.0.0.1:abc").is_err());
+    }
+
+    #[test]
+    fn rejects_empty() {
+        assert!(Target::parse("@").is_err());
+        assert!(Target::parse("").is_err());
+    }
+}
