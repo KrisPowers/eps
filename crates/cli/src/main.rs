@@ -90,7 +90,7 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
     if args.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        print!("{}", report::render_human(&report, &services));
+        print!("{}", report::render_human(&report, &services, target.port));
     }
 
     let has_high = report

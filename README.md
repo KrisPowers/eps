@@ -126,14 +126,16 @@ yours.
 
 ### Example
 
-In a terminal the output is color coded: severity badges, status codes, auth
-state and risky services are tinted, and sensitive paths are bold. Piped output
-or `NO_COLOR` drops the color and keeps the layout.
+In a terminal the output is color coded: status codes, auth state and risky
+services are tinted, and sensitive paths are bold. Piped output or `NO_COLOR`
+drops the color and keeps the layout. When the target pins a port
+(`@ host:8080`), the ports section is left out and only that port's endpoints
+are shown.
 
 ```
 ╭────────────────────────────────────────────────────────────────────────────╮
 │ @ api.internal                                                   10.0.0.42 │
-│ 2 open ports  ·  3 endpoints  ·  1 high  0 med  1 low  1 info              │
+│ 2 open ports  ·  3 endpoints  ·  3 findings                                │
 ╰────────────────────────────────────────────────────────────────────────────╯
 
   PORTS ──────────────────────────────────────────────────────────────────────
@@ -146,12 +148,11 @@ or `NO_COLOR` drops the color and keeps the layout.
   200  OPEN       limited   /api           API root
 
   FINDINGS ───────────────────────────────────────────────────────────────────
-  [HIGH]  Unauthenticated sensitive endpoint: Actuator environment (secrets
-          risk)
-          http://api.internal:8080/actuator/env (port 8080)
-          Returned 200 with no authentication. This path commonly leaks
-          configuration, internals, or control. Put it behind auth or stop
-          exposing it.
+  Unauthenticated sensitive endpoint: Actuator environment (secrets risk)
+    http://api.internal:8080/actuator/env (port 8080)
+    Returned 200 with no authentication. This path commonly leaks
+    configuration, internals, or control. Put it behind auth or stop exposing
+    it.
 
   ...
 
