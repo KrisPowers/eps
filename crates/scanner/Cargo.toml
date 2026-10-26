@@ -1,6 +1,6 @@
 [package]
-name = "at-http"
-description = "HTTP(S) endpoint discovery and auth/TLS/rate-limit posture checks for `@`."
+name = "scanner"
+description = "Target parsing, service catalog, and TCP connect port scanning for `@`."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-reqwest.workspace = true
+tokio.workspace = true
 futures.workspace = true
 anyhow.workspace = true

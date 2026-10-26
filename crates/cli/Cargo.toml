@@ -1,5 +1,5 @@
 [package]
-name = "at"
+name = "cli"
 description = "Read-only recon CLI: point it at an IP with @ and it reports exposed ports, discoverable endpoints, and their auth/TLS/rate-limit posture."
 version.workspace = true
 edition.workspace = true
@@ -19,9 +19,9 @@ name = "at"
 path = "src/main.rs"
 
 [dependencies]
-at-core.workspace = true
-at-http.workspace = true
-at-report.workspace = true
+scanner.workspace = true
+endpoints.workspace = true
+report.workspace = true
 clap.workspace = true
 tokio.workspace = true
 serde_json.workspace = true

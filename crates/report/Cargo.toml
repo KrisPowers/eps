@@ -1,5 +1,5 @@
 [package]
-name = "at-report"
+name = "report"
 description = "Severity model and text/JSON rendering of `@` scan results."
 version.workspace = true
 edition.workspace = true
@@ -8,6 +8,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-at-core.workspace = true
-at-http.workspace = true
+scanner.workspace = true
+endpoints.workspace = true
 serde.workspace = true

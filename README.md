@@ -58,7 +58,7 @@ brew install krispowers/at/at
 ### From source
 
 ```sh
-cargo build --release -p at
+cargo build --release -p cli
 cp target/release/at ~/.local/bin/@        # or anywhere on your PATH
 ```
 
@@ -166,12 +166,12 @@ cargo fmt         # formatting
 
 Workspace layout:
 
-- `crates/at-core` - parse the `@host[:port]` syntax (`target`), the service
+- `crates/scanner` - parse the `@host[:port]` syntax (`target`), the service
   catalog (`ports`), and the async TCP connect scanner (`scan`).
-- `crates/at-http` - scheme detection, endpoint discovery, auth/TLS/rate-limit
+- `crates/endpoints` - scheme detection, endpoint discovery, auth/TLS/rate-limit
   checks, and the conventional endpoint catalog (`paths`).
-- `crates/at-report` - severity model and text/JSON rendering.
-- `crates/at` - the CLI binary, installed as `@`.
+- `crates/report` - severity model and text/JSON rendering.
+- `crates/cli` - the CLI binary, installed as `@`.
 - `Formula/` - the Homebrew formula.
 
 ## License
