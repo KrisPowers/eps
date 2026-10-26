@@ -125,3 +125,11 @@ pub const COMMON: &[KnownPort] = &[
 ];
 
 /// Ports in [`COMMON`] that typically speak HTTP, with their TLS flag.
+pub fn http_hint(port: u16) -> Option<bool> {
+    COMMON
+        .iter()
+        .find(|k| k.port == port)
+        .and_then(|k| k.http_tls)
+}
+
+/// Human service label for a port, or `"unknown"`.
