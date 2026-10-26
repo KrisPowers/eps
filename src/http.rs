@@ -129,3 +129,27 @@ impl RateLimitInfo {
 
 /// A single discovered, existing endpoint and its posture.
 #[derive(Debug, Clone)]
+pub struct Endpoint {
+    pub url: String,
+    pub path: String,
+    pub status: u16,
+    pub auth: AuthState,
+    pub tls: bool,
+    pub sensitive: bool,
+    pub note: String,
+    pub server: Option<String>,
+    pub content_type: Option<String>,
+    pub www_authenticate: Option<String>,
+    pub location: Option<String>,
+    pub rate_limit: RateLimitInfo,
+}
+
+/// Result of inspecting one HTTP(S) service (one port).
+#[derive(Debug, Clone)]
+pub struct ServiceReport {
+    pub port: u16,
+    pub scheme: String,
+    pub reachable: bool,
+    pub endpoints: Vec<Endpoint>,
+}
+
