@@ -126,25 +126,36 @@ yours.
 
 ### Example
 
+In a terminal the output is color coded: severity badges, status codes, auth
+state and risky services are tinted, and sensitive paths are bold. Piped output
+or `NO_COLOR` drops the color and keeps the layout.
+
 ```
-@ 10.0.0.42 (10.0.0.42)
+╭────────────────────────────────────────────────────────────────────────────╮
+│ @ api.internal                                                   10.0.0.42 │
+│ 2 open ports  ·  3 endpoints  ·  1 high  0 med  1 low  1 info              │
+╰────────────────────────────────────────────────────────────────────────────╯
 
-Open ports
-     22/tcp  ssh
-   8080/tcp  http-proxy
+  PORTS ──────────────────────────────────────────────────────────────────────
+     22/tcp   ssh
+   8080/tcp   http-proxy
 
-Endpoints on http:8080 (http)
-  200  OPEN (no auth) no-ratelimit /actuator/env  Actuator environment (secrets risk)
-  401  protected      no-ratelimit /admin         admin console   challenge: Basic
-  200  OPEN (no auth) rate-limited /api            API root
+  ENDPOINTS  http://api.internal:8080 ────────────────────────────────────────
+  200  OPEN       no limit  /actuator/env  Actuator environment (secrets risk)
+  401  PROTECTED  no limit  /admin         admin console  Basic
+  200  OPEN       limited   /api           API root
 
-Findings
-  HIGH  Unauthenticated sensitive endpoint: Actuator environment (secrets risk)
-        http://10.0.0.42:8080/actuator/env (port 8080)
-        Returned 200 with no authentication. ...
+  FINDINGS ───────────────────────────────────────────────────────────────────
+  [HIGH]  Unauthenticated sensitive endpoint: Actuator environment (secrets
+          risk)
+          http://api.internal:8080/actuator/env (port 8080)
+          Returned 200 with no authentication. This path commonly leaks
+          configuration, internals, or control. Put it behind auth or stop
+          exposing it.
+
   ...
 
-Summary: 1 high | 0 medium | 1 low. Read-only scan - exposure is reported, not judged.
+  Read-only scan - exposure is reported, not judged.
 ```
 
 ### Exit codes
