@@ -40,3 +40,45 @@ pub struct PathSpec {
 
 /// Configuration for the HTTP phase.
 #[derive(Debug, Clone)]
+pub struct HttpConfig {
+    pub timeout: Duration,
+    pub concurrency: usize,
+    pub paths: Vec<PathSpec>,
+    /// When true, send a small bounded burst to each open endpoint to observe
+    /// whether throttling actually kicks in (opt-in; passive detection is always on).
+    pub active_rate_probe: bool,
+    pub active_rate_count: usize,
+    /// Reject invalid/self-signed certs (default: accept them so internal
+    /// services can still be inspected; the scheme is reported either way).
+    pub strict_tls: bool,
+    pub user_agent: String,
+}
+
+impl Default for HttpConfig {
+    fn default() -> Self {
+        HttpConfig {
+            timeout: Duration::from_secs(6),
+            concurrency: 16,
+            paths: default_paths(),
+            active_rate_probe: false,
+            active_rate_count: 15,
+            strict_tls: false,
+            user_agent: concat!("at/", env!("CARGO_PKG_VERSION"), " (read-only recon)").to_string(),
+        }
+    }
+}
+
+/// The built-in conventional path list.
+pub fn default_paths() -> Vec<PathSpec> {
+    paths::DEFAULT
+        .iter()
+        .map(|k| PathSpec {
+            path: k.path.to_string(),
+            sensitive: k.sensitive,
+            note: k.note.to_string(),
+        })
+        .collect()
+}
+
+/// How an endpoint responded to an unauthenticated request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
