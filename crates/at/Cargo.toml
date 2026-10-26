@@ -1,0 +1,28 @@
+[package]
+name = "at"
+description = "Read-only recon CLI: point it at an IP with @ and it reports exposed ports, discoverable endpoints, and their auth/TLS/rate-limit posture."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["security", "recon", "network", "scanner", "cli"]
+categories = ["command-line-utilities"]
+# The crate compiles as `at` (a `@` crate name is rejected by rustc, which
+# reads `@`-prefixed tokens as argument files). The binary is installed as `@`
+# (see install.sh / install.ps1 / the Homebrew formula), so the typed command
+# is `@`.
+
+[[bin]]
+name = "at"
+path = "src/main.rs"
+
+[dependencies]
+at-core.workspace = true
+at-http.workspace = true
+at-report.workspace = true
+clap.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true

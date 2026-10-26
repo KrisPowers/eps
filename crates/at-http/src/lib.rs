@@ -14,7 +14,7 @@ use std::time::Duration;
 use futures::stream::{self, StreamExt};
 use reqwest::{redirect::Policy, Client, StatusCode};
 
-use crate::paths;
+pub mod paths;
 
 /// Response headers that indicate rate limiting is advertised or active.
 const RATE_LIMIT_HEADERS: &[&str] = &[

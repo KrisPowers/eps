@@ -1,9 +1,9 @@
 # Homebrew formula for `at`, installed as the command `@`.
 #
-# This lives in a tap repo (e.g. github.com/krispowers/homebrew-tap as
-# Formula/at.rb) so users can:
+# This repo doubles as its own tap, so users can:
 #
-#   brew install krispowers/tap/at
+#   brew tap krispowers/at https://github.com/krispowers/at
+#   brew install krispowers/at/at
 #
 # NOTE: the project repo is currently private. Until the first public release,
 # the release archives referenced below will not exist and the formula will not
