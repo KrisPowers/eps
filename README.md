@@ -89,3 +89,20 @@ IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
 >
 > True no-space `@10.0.0.5` isn't possible in a standard shell; use `@ 10.0.0.5`.
 
+### Options
+
+| Flag | Meaning |
+|------|---------|
+| `--json` | Emit structured JSON instead of the text report. |
+| `--full` | Scan all 65,535 ports instead of the common list. |
+| `--ports <SPEC>` | Custom port set, e.g. `80,443,8000-8100`. |
+| `--no-discovery` | Report open ports only; skip HTTP discovery. |
+| `--connect-timeout <MS>` | Per-port TCP connect timeout (default 800 ms). |
+| `--http-timeout <SECS>` | Per-request HTTP timeout (default 6 s). |
+| `--concurrency <N>` | Max concurrent port probes (default 256). |
+| `--probe-rate-limit` | Actively send a small bounded burst to each **open** endpoint to see whether throttling kicks in. Opt-in; passive header detection is always on. |
+| `--burst <N>` | Requests per active burst (default 15). |
+| `--strict-tls` | Reject invalid/self-signed certs instead of inspecting them anyway. |
+| `--paths <FILE>` | Use a custom endpoint list (one path per line; `!` prefix marks a path sensitive). Replaces the built-in list. |
+| `--fail-on-high` | Exit `2` if any **HIGH** finding is reported - handy in CI gates. |
+
