@@ -42,3 +42,27 @@ impl Severity {
 
 /// A single actionable observation.
 #[derive(Debug, Clone, Serialize)]
+pub struct Finding {
+    pub severity: Severity,
+    pub title: String,
+    pub location: String,
+    pub detail: String,
+}
+
+/// The full machine-readable result.
+#[derive(Debug, Clone, Serialize)]
+pub struct Report {
+    pub target: String,
+    pub resolved_ip: String,
+    pub open_ports: Vec<PortView>,
+    pub endpoints: Vec<EndpointView>,
+    pub findings: Vec<Finding>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PortView {
+    pub port: u16,
+    pub service: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
