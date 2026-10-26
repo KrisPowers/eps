@@ -159,3 +159,22 @@ Scan only hosts you own or are **explicitly authorized** to assess. Port scannin
 and endpoint probing against systems you don't control may be unlawful and against
 provider terms, even though `at` is read-only. You are responsible for how you use it.
 
+## Development
+
+```sh
+cargo test        # unit tests
+cargo clippy      # lints
+cargo fmt         # formatting
+```
+
+Module layout:
+
+- `target.rs` - parse the `@host[:port]` syntax (IPv4 / IPv6 / hostname).
+- `ports.rs` / `scan.rs` - port catalog and the async TCP connect scanner.
+- `paths.rs` - conventional endpoint catalog with sensitivity tags.
+- `http.rs` - scheme detection, endpoint discovery, auth/TLS/rate-limit checks.
+- `report.rs` - severity model and text/JSON rendering.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
