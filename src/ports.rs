@@ -133,3 +133,10 @@ pub fn http_hint(port: u16) -> Option<bool> {
 }
 
 /// Human service label for a port, or `"unknown"`.
+pub fn service_name(port: u16) -> &'static str {
+    COMMON
+        .iter()
+        .find(|k| k.port == port)
+        .map(|k| k.service)
+        .unwrap_or("unknown")
+}
