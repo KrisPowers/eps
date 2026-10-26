@@ -126,15 +126,13 @@ yours.
 
 ### Example
 
-In a terminal the output is color coded: status codes, auth state and risky
-services are tinted, and sensitive paths are bold. Piped output or `NO_COLOR`
-drops the color and keeps the layout. When the target pins a port
+Each endpoint gets a card: its status, path and note, then a highlighted block
+per security control (auth, JWT, rate limiting, HTTPS). Green means the control
+is configured, yellow configured but bypassable or weakened, red not
+configured, and white that the response does not show either way. Piped output
+or `NO_COLOR` drops the color and keeps the layout. When the target pins a port
 (`@ host:8080`), the ports section is left out and only that port's endpoints
 are shown.
-
-The security section gives each control (authentication, JWT, rate limiting,
-HTTPS) a highlighted verdict: green when it is configured, yellow when it is
-configured but bypassable or weakened, red when it is not configured.
 
 ```
 ╭────────────────────────────────────────────────────────────────────────────╮
@@ -147,24 +145,16 @@ configured but bypassable or weakened, red when it is not configured.
    8080/tcp   http-proxy
 
   ENDPOINTS  http://api.internal:8080 ────────────────────────────────────────
-  200  OPEN       no limit  /actuator/env  Actuator environment (secrets risk)
-  401  PROTECTED  no limit  /admin         admin console  Basic
-  200  OPEN       limited   /api           API root
+  [configured] [insecure] [not configured] [not shown]
 
-  SECURITY ───────────────────────────────────────────────────────────────────
-  [INSECURE      ]  Authentication
-                    1 endpoint asks for credentials (Basic), but these
-                    sensitive paths answer without: /actuator/env.
+  200  /actuator/env  Actuator environment (secrets risk)
+       [AUTH none     ] [JWT none  ] [RATE none        ] [HTTPS plain]
 
-  [NOT CONFIGURED]  JWT
-                    No endpoint asks for a Bearer token.
+  401  /admin  admin console  Basic realm="admin"
+       [AUTH Basic    ] [JWT none  ] [RATE none        ] [HTTPS plain]
 
-  [CONFIGURED    ]  Rate limiting
-                    Limits on /api. Every open API endpoint has one.
-
-  [NOT CONFIGURED]  HTTPS
-                    Plain HTTP only on port 8080. Passwords and tokens cross
-                    the wire unencrypted.
+  200  /api  API root  nginx
+       [AUTH none     ] [JWT none  ] [RATE advertised  ] [HTTPS plain]
 
   Read-only scan - exposure is reported, not judged.
 ```
