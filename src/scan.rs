@@ -100,3 +100,45 @@ pub fn full_port_list() -> Vec<u16> {
 
 /// Parse a `--ports` spec like `80,443,8000-8100` into a sorted, de-duplicated
 /// port list.
+pub fn parse_port_spec(spec: &str) -> Result<Vec<u16>, String> {
+    let mut out = Vec::new();
+    for part in spec.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        match part.split_once('-') {
+            Some((a, b)) => {
+                let start: u16 = a
+                    .trim()
+                    .parse()
+                    .map_err(|_| format!("invalid port `{a}` in range"))?;
+                let end: u16 = b
+                    .trim()
+                    .parse()
+                    .map_err(|_| format!("invalid port `{b}` in range"))?;
+                if start == 0 || end == 0 {
+                    return Err("port 0 is not valid".to_string());
+                }
+                if start > end {
+                    return Err(format!("range `{part}` is backwards"));
+                }
+                out.extend(start..=end);
+            }
+            None => {
+                let n: u16 = part.parse().map_err(|_| format!("invalid port `{part}`"))?;
+                if n == 0 {
+                    return Err("port 0 is not valid".to_string());
+                }
+                out.push(n);
+            }
+        }
+    }
+    if out.is_empty() {
+        return Err("no ports in spec".to_string());
+    }
+    out.sort_unstable();
+    out.dedup();
+    Ok(out)
+}
+
