@@ -235,3 +235,88 @@ async fn active_rate_probe(client: &Client, url: &str, count: usize) -> (usize, 
     (sent, false)
 }
 
+async fn inspect_path(
+    client: &Client,
+    scheme: &str,
+    host: &str,
+    port: u16,
+    spec: &PathSpec,
+    cfg: &HttpConfig,
+    tls: bool,
+) -> Option<Endpoint> {
+    let url = format!("{scheme}://{}{}", authority(host, port), spec.path);
+    let resp = client.get(&url).send().await.ok()?;
+    let status = resp.status();
+    let auth = classify(status)?;
+
+    let mut rate_limit = collect_rate_headers(&resp);
+    let server = header_str(&resp, "server");
+    let content_type = header_str(&resp, "content-type");
+    let www_authenticate = header_str(&resp, "www-authenticate");
+    let location = header_str(&resp, "location");
+
+    // Optional active throttling probe - only for openly reachable endpoints,
+    // and only when the user explicitly opted in.
+    if cfg.active_rate_probe && auth == AuthState::Open {
+        rate_limit.active = Some(active_rate_probe(client, &url, cfg.active_rate_count).await);
+    }
+
+    Some(Endpoint {
+        url,
+        path: spec.path.clone(),
+        status: status.as_u16(),
+        auth,
+        tls,
+        sensitive: spec.sensitive,
+        note: spec.note.clone(),
+        server,
+        content_type,
+        www_authenticate,
+        location,
+        rate_limit,
+    })
+}
+
+/// Inspect one HTTP-capable port end to end.
+pub async fn inspect_service(
+    host: &str,
+    port: u16,
+    hint: Option<bool>,
+    cfg: &HttpConfig,
+) -> anyhow::Result<ServiceReport> {
+    let client = build_client(cfg)?;
+
+    let scheme = match detect_scheme(&client, host, port, hint).await {
+        Some(s) => s,
+        None => {
+            return Ok(ServiceReport {
+                port,
+                scheme: "http".to_string(),
+                reachable: false,
+                endpoints: Vec::new(),
+            })
+        }
+    };
+    let tls = scheme == "https";
+
+    let endpoints: Vec<Endpoint> = stream::iter(cfg.paths.iter())
+        .map(|spec| {
+            let client = &client;
+            async move { inspect_path(client, scheme, host, port, spec, cfg, tls).await }
+        })
+        .buffer_unordered(cfg.concurrency.max(1))
+        .filter_map(|e| async move { e })
+        .collect()
+        .await;
+
+    let mut endpoints = endpoints;
+    endpoints.sort_by(|a, b| a.path.cmp(&b.path));
+
+    Ok(ServiceReport {
+        port,
+        scheme: scheme.to_string(),
+        reachable: true,
+        endpoints,
+    })
+}
+
