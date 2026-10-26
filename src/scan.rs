@@ -142,3 +142,41 @@ pub fn parse_port_spec(spec: &str) -> Result<Vec<u16>, String> {
     Ok(out)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn port_spec_singles_and_ranges() {
+        let got = parse_port_spec("80,443,8000-8002").unwrap();
+        assert_eq!(got, vec![80, 443, 8000, 8001, 8002]);
+    }
+
+    #[test]
+    fn port_spec_dedups_and_sorts() {
+        let got = parse_port_spec("443,80,443,80").unwrap();
+        assert_eq!(got, vec![80, 443]);
+    }
+
+    #[test]
+    fn port_spec_rejects_garbage() {
+        assert!(parse_port_spec("abc").is_err());
+        assert!(parse_port_spec("100-50").is_err());
+        assert!(parse_port_spec("0").is_err());
+        assert!(parse_port_spec("").is_err());
+    }
+
+    #[tokio::test]
+    async fn resolve_literal_ip() {
+        let ips = resolve("127.0.0.1", false).await.unwrap();
+        assert_eq!(ips, vec!["127.0.0.1".parse::<IpAddr>().unwrap()]);
+    }
+
+    #[tokio::test]
+    async fn closed_port_on_loopback() {
+        // Port 1 is almost certainly not listening on loopback.
+        let ip: IpAddr = "127.0.0.1".parse().unwrap();
+        let open = scan_ports(ip, &[1], 1, Duration::from_millis(300)).await;
+        assert!(open.is_empty());
+    }
+}
