@@ -113,3 +113,21 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn build_http_config(args: &Cli) -> anyhow::Result<HttpConfig> {
+    let paths = match &args.paths {
+        Some(file) => load_paths(file)?,
+        None => http::default_paths(),
+    };
+    Ok(HttpConfig {
+        timeout: Duration::from_secs(args.http_timeout),
+        concurrency: 16,
+        paths,
+        active_rate_probe: args.probe_rate_limit,
+        active_rate_count: args.burst,
+        strict_tls: args.strict_tls,
+        ..HttpConfig::default()
+    })
+}
+
+/// Load a custom path list: one path per line, `#` comments ignored, a leading
+/// `!` marks the path sensitive.
