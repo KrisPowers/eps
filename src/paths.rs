@@ -15,3 +15,13 @@ pub struct KnownPath {
     pub note: &'static str,
 }
 
+const fn kp(path: &'static str, sensitive: bool, note: &'static str) -> KnownPath {
+    KnownPath {
+        path,
+        sensitive,
+        note,
+    }
+}
+
+/// Default discovery list. Kept deliberately focused on conventional,
+/// default-published paths across common stacks.
