@@ -66,3 +66,21 @@ pub struct PortView {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct EndpointView {
+    pub url: String,
+    pub status: u16,
+    pub auth: String,
+    pub tls: bool,
+    pub sensitive: bool,
+    pub rate_limited: bool,
+    pub note: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+}
+
+/// Non-HTTP services whose public exposure is usually a serious problem, with
+/// the severity to assign and a short rationale.
