@@ -320,3 +320,46 @@ pub async fn inspect_service(
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_statuses() {
+        assert_eq!(classify(StatusCode::OK), Some(AuthState::Open));
+        assert_eq!(
+            classify(StatusCode::UNAUTHORIZED),
+            Some(AuthState::Protected)
+        );
+        assert_eq!(classify(StatusCode::FORBIDDEN), Some(AuthState::Protected));
+        assert_eq!(
+            classify(StatusCode::TEMPORARY_REDIRECT),
+            Some(AuthState::Redirected)
+        );
+        assert_eq!(
+            classify(StatusCode::TOO_MANY_REQUESTS),
+            Some(AuthState::RateLimited)
+        );
+        assert_eq!(classify(StatusCode::NOT_FOUND), None);
+        assert_eq!(
+            classify(StatusCode::INTERNAL_SERVER_ERROR),
+            Some(AuthState::Present)
+        );
+    }
+
+    #[test]
+    fn rate_signal_detection() {
+        let mut info = RateLimitInfo::default();
+        assert!(!info.any_signal());
+        info.headers_seen.push("x-ratelimit-limit".to_string());
+        assert!(info.any_signal());
+    }
+
+    #[test]
+    fn default_paths_nonempty_and_tagged() {
+        let p = default_paths();
+        assert!(p.len() > 20);
+        assert!(p.iter().any(|s| s.sensitive));
+        assert!(p.iter().any(|s| s.path == "/actuator/env" && s.sensitive));
+    }
+}
