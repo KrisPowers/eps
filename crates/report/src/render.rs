@@ -201,10 +201,10 @@ fn https(ep: &Endpoint) -> Posture {
     }
 }
 
-/// A section heading ruled out to the full width: `  PORTS ───────`.
+/// A section heading ruled out to the full width: `PORTS ───────`.
 fn heading(paint: Paint, title: &str, aside: &str, out: &mut String) {
     let mut row = Row::new(paint);
-    row.add("1", &format!("  {title}"));
+    row.add("1", title);
     if !aside.is_empty() {
         row.add(ACCENT, &format!("  {}", fit(aside, WIDTH - 16)));
     }
@@ -218,7 +218,6 @@ fn heading(paint: Paint, title: &str, aside: &str, out: &mut String) {
 /// A highlighted status line in place of a section's content.
 fn notice(paint: Paint, text: &str, out: &mut String) {
     let mut row = Row::new(paint);
-    row.add("", "  ");
     row.add(Posture::Unknown.codes(), &format!(" {text} "));
     row.finish(out);
 }
@@ -230,7 +229,7 @@ fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
     let rule = "─".repeat(WIDTH - 2);
 
     let mut top = Row::new(paint);
-    top.add(ACCENT, &format!("╭{rule}╮"));
+    top.add(ACCENT, &format!("┌{rule}┐"));
     top.finish(out);
 
     let ip = if report.resolved_ip == report.target {
@@ -266,7 +265,7 @@ fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
     counts.finish(out);
 
     let mut bottom = Row::new(paint);
-    bottom.add(ACCENT, &format!("╰{rule}╯"));
+    bottom.add(ACCENT, &format!("└{rule}┘"));
     bottom.finish(out);
 }
 
@@ -279,12 +278,13 @@ fn port_section(paint: Paint, report: &Report, out: &mut String) {
     }
     for p in &report.open_ports {
         let mut row = Row::new(paint);
-        row.add("1", &format!("  {:>5}", p.port));
-        row.add("", "/tcp   ");
+        row.add("1", &p.port.to_string());
+        row.add("", "/tcp");
+        row.pad_to(11);
         match risky_service(p.port, &p.service) {
             Some((_, why)) => {
                 row.add("1;33", &p.service);
-                row.pad_to(32);
+                row.pad_to(28);
                 row.add("", why);
             }
             None => {
@@ -307,7 +307,6 @@ fn endpoint_section(paint: Paint, svc: &ServiceReport, out: &mut String) {
     heading(paint, "ENDPOINTS", &base, out);
 
     let mut legend = Row::new(paint);
-    legend.add("", "  ");
     chip(&mut legend, Posture::Configured, "configured");
     legend.add("", " ");
     chip(&mut legend, Posture::Insecure, "insecure");
@@ -328,7 +327,6 @@ fn endpoint_section(paint: Paint, svc: &ServiceReport, out: &mut String) {
 
     for ep in &svc.endpoints {
         let mut row = Row::new(paint);
-        row.add("", "  ");
         row.add(status_tint(ep.status), &ep.status.to_string());
         row.add("", "  ");
         chip(&mut row, auth(ep), "AUTH");
@@ -372,11 +370,6 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
     for svc in served {
         endpoint_section(paint, svc, &mut out);
     }
-
-    let mut row = Row::new(paint);
-    row.add("", "  Read-only scan - exposure is reported, not judged.");
-    out.push('\n');
-    row.finish(&mut out);
     out
 }
 
