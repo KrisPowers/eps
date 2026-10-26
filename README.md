@@ -63,3 +63,29 @@ cp target/release/at ~/.local/bin/@        # or anywhere on your PATH
 
 Make sure the install dir is on your `PATH` (`~/.local/bin` by default).
 
+## Usage
+
+```sh
+@ 192.168.1.10            # scan common ports, then inspect any HTTP services
+@ 192.168.1.10:8080       # inspect a single pinned port
+@ 10.0.0.5 --full         # scan all 65535 ports
+@ 10.0.0.5 --ports 80,443,8000-8100
+@ api.internal --json     # machine-readable output for pipelines/CI
+@ 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
+```
+
+The target follows the command with a space (`@ 10.0.0.5`), as any command takes
+its argument. A leading `@` on the target itself is also accepted (`@ @10.0.0.5`).
+IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
+`2001:db8::1` on its own. Hostnames are resolved via the system resolver.
+
+> **Glued form?** A single token like `@10.0.0.5` (no space) can't invoke a binary
+> named `@` - the shell treats the whole token as the command name. If you want
+> that exact ergonomics, add a shell function to your `~/.zshrc`:
+>
+> ```sh
+> @() { command @ "$@"; }   # lets `@ 10.0.0.5` work even if @ isn't first on PATH
+> ```
+>
+> True no-space `@10.0.0.5` isn't possible in a standard shell; use `@ 10.0.0.5`.
+
