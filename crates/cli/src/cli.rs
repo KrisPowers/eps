@@ -62,4 +62,18 @@ pub struct Cli {
     /// Exit with code 2 if any HIGH finding is reported (useful in CI).
     #[arg(long)]
     pub fail_on_high: bool,
+
+    /// Run as an HTTP service on this address instead of scanning, so a
+    /// dashboard can start scans and read their reports (see README).
+    #[arg(long, value_name = "ADDR")]
+    pub serve: Option<String>,
+
+    /// With --serve: file holding the bearer key every API request must carry.
+    /// Without it only /health is answered.
+    #[arg(long, value_name = "FILE", requires = "serve")]
+    pub key_file: Option<std::path::PathBuf>,
+
+    /// With --serve: folder to keep scan results in across restarts.
+    #[arg(long, value_name = "DIR", requires = "serve")]
+    pub data: Option<std::path::PathBuf>,
 }

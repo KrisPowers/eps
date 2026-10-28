@@ -161,6 +161,28 @@ ENDPOINTS  http://api.internal:8080 ──────────────�
 | `1` | Error (bad target, resolution failure, ...). |
 | `2` | Ran successfully **and** a HIGH finding was reported (only with `--fail-on-high`). |
 
+## Service mode
+
+`@ --serve <addr>` runs `@` as an HTTP service instead of scanning once, so a
+dashboard (such as [truebrew](https://github.com/KrisPowers/truebrew)) can start
+scans and build its tables from the reports. The `Dockerfile` runs it this way.
+
+```sh
+@ --serve 0.0.0.0:8080 --key-file /run/truebrew/key --data /data
+```
+
+Every route but `/health` needs `Authorization: Bearer <key>`, where the key is the
+contents of `--key-file`; without a key file they refuse every request. Scans run two
+at a time and the newest 100 are kept in `--data`.
+
+| Route | What it does |
+|---|---|
+| `GET /health` | `{"ok": true}` |
+| `GET /api/scans` | Every kept scan, newest first: target, status (`queued`, `running`, `done`, `failed`), times in Unix milliseconds, and counts of open ports, endpoints and findings by severity |
+| `POST /api/scans` | Starts a scan: `{"target": "192.168.1.10", "no_discovery": false, "probe_rate_limit": false, "strict_tls": false}` |
+| `GET /api/scans/{id}` | One scan with its full report (the same JSON as `--json`) |
+| `DELETE /api/scans/{id}` | Forgets a finished scan |
+
 ## Authorized use only
 
 Scan only hosts you own or are **explicitly authorized** to assess. Port scanning
