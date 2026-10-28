@@ -1,6 +1,6 @@
 # `@` as an HTTP service (`--serve`), the container a dashboard such as
 # truebrew starts scans through. See "Service mode" in the README.
-FROM rust:1.88-slim-bookworm AS build
+FROM rust:1-slim-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
