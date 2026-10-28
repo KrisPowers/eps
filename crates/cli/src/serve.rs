@@ -5,12 +5,13 @@
 //! being the contents of `--key-file`. The file is read on each request, so
 //! it may appear after startup; without one those routes refuse everything.
 //!
-//! - `GET /api/scans`: every kept scan, newest first, with counts
+//! - `GET /api/scans`: every kept scan, newest first, with counts, and for
+//!   one still going, its `progress` (see `progress.rs`)
 //! - `POST /api/scans` `{ target, no_discovery?, probe_rate_limit?, strict_tls? }`: start one
-//! - `GET /api/scans/{id}`: one scan with its full report
+//! - `GET /api/scans/{id}`: one scan with its full report, or its progress
 //! - `DELETE /api/scans/{id}`: forget a finished scan
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -27,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::{Mutex, Semaphore};
 
+use crate::progress::Progress;
 use crate::{scan_target, ScanOptions};
 
 /// Scans kept, newest first; older ones are dropped.
@@ -109,9 +111,21 @@ struct App {
     key_file: Option<PathBuf>,
     data: Option<PathBuf>,
     slots: Semaphore,
+    /// Where each scan still going is.
+    live: std::sync::Mutex<HashMap<String, Arc<Progress>>>,
 }
 
 impl App {
+    /// A scan's row, with its progress while it's going.
+    fn row(&self, s: &Scan) -> Value {
+        let mut v = s.summary();
+        let live = self.live.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(p) = live.get(&s.id) {
+            v["progress"] = p.snapshot();
+        }
+        v
+    }
+
     async fn update(&self, id: &str, f: impl FnOnce(&mut Scan)) {
         let mut scans = self.scans.lock().await;
         if let Some(s) = scans.iter_mut().find(|s| s.id == id) {
@@ -159,6 +173,7 @@ pub async fn run(
         key_file,
         data,
         slots: Semaphore::new(RUNNING),
+        live: std::sync::Mutex::new(HashMap::new()),
     });
 
     let api = Router::new()
@@ -208,14 +223,14 @@ fn error(code: StatusCode, msg: &str) -> Response {
 
 async fn list(State(app): State<Arc<App>>) -> Json<Value> {
     let scans = app.scans.lock().await;
-    Json(json!({ "scans": scans.iter().map(Scan::summary).collect::<Vec<_>>() }))
+    Json(json!({ "scans": scans.iter().map(|s| app.row(s)).collect::<Vec<_>>() }))
 }
 
 async fn show(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response {
     let scans = app.scans.lock().await;
     match scans.iter().find(|s| s.id == id) {
         Some(s) => {
-            let mut v = s.summary();
+            let mut v = app.row(s);
             v["report"] = s.report.clone().unwrap_or(Value::Null);
             Json(v).into_response()
         }
@@ -263,6 +278,10 @@ async fn create(State(app): State<Arc<App>>, Json(req): Json<NewScan>) -> Respon
     };
     let id = scan.id.clone();
     let summary = scan.summary();
+    app.live
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(id.clone(), Arc::new(Progress::default()));
     {
         let mut scans = app.scans.lock().await;
         scans.push_front(scan);
@@ -277,6 +296,13 @@ async fn create(State(app): State<Arc<App>>, Json(req): Json<NewScan>) -> Respon
 /// thread and runtime, so a long one never holds up the API.
 async fn execute(app: Arc<App>, id: String, target: String, o: Options) {
     let _slot = app.slots.acquire().await;
+    let progress = app
+        .live
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&id)
+        .cloned()
+        .unwrap_or_default();
     app.update(&id, |s| s.status = Status::Running).await;
     let opts = ScanOptions {
         target,
@@ -297,7 +323,7 @@ async fn execute(app: Arc<App>, id: String, target: String, o: Options) {
             .map_err(|e| e.to_string())
             .and_then(|rt| {
                 rt.block_on(async {
-                    scan_target(&opts)
+                    scan_target(&opts, &progress)
                         .await
                         .map(|out| serde_json::to_value(&out.report).unwrap_or(Value::Null))
                         .map_err(|e| format!("{e:#}"))
@@ -306,6 +332,7 @@ async fn execute(app: Arc<App>, id: String, target: String, o: Options) {
         let _ = tx.send(result);
     });
     let result = rx.await.unwrap_or_else(|_| Err("the scan stopped unexpectedly".into()));
+    app.live.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
     app.update(&id, |s| {
         s.finished = Some(now_ms());
         match result {

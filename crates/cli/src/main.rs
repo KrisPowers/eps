@@ -9,6 +9,7 @@
 //! own or are explicitly authorized to assess.
 
 mod cli;
+mod progress;
 mod serve;
 
 use std::process::ExitCode;
@@ -20,6 +21,7 @@ use scanner::scan;
 use scanner::target::Target;
 
 use crate::cli::Cli;
+use crate::progress::{Phase, Progress};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -53,7 +55,7 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
         strict_tls: args.strict_tls,
         paths,
     };
-    let out = scan_target(&opts).await?;
+    let out = scan_target(&opts, &Progress::default()).await?;
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&out.report)?);
@@ -95,9 +97,14 @@ pub(crate) struct ScanOutput {
 }
 
 /// Scans one target: every port (or the pinned one), then HTTP endpoint
-/// discovery and posture checks on the ports that may speak HTTP.
-pub(crate) async fn scan_target(opts: &ScanOptions) -> anyhow::Result<ScanOutput> {
+/// discovery and posture checks on the ports that may speak HTTP. Where it
+/// is goes into `progress` as it goes.
+pub(crate) async fn scan_target(
+    opts: &ScanOptions,
+    progress: &Progress,
+) -> anyhow::Result<ScanOutput> {
     let target = Target::parse(&opts.target).map_err(|e| anyhow::anyhow!(e))?;
+    progress.set_phase(Phase::Resolving);
 
     // Resolve the host. Literal IPs pass straight through.
     let ips = scan::resolve(&target.host, target.is_ipv6).await?;
@@ -118,8 +125,18 @@ pub(crate) async fn scan_target(opts: &ScanOptions) -> anyhow::Result<ScanOutput
     };
 
     // Port scan.
-    let open_ports =
-        scan::scan_ports(ip, &ports_to_scan, opts.concurrency, opts.connect_timeout).await;
+    progress.start_ports(&ip.to_string(), ports_to_scan.len());
+    let on_port = |port: u16, state: scan::PortState| {
+        progress.port_done(port, state == scan::PortState::Open)
+    };
+    let open_ports = scan::scan_ports_with(
+        ip,
+        &ports_to_scan,
+        opts.concurrency,
+        opts.connect_timeout,
+        &on_port,
+    )
+    .await;
 
     // HTTP endpoint discovery + posture checks.
     let services: Vec<ServiceReport> = if opts.no_discovery {
@@ -127,16 +144,24 @@ pub(crate) async fn scan_target(opts: &ScanOptions) -> anyhow::Result<ScanOutput
     } else {
         let cfg = build_http_config(opts);
         let mut reports = Vec::new();
-        for op in &open_ports {
-            // Inspect ports that are known HTTP, or unknown (could be any app),
-            // but skip ports whose catalog service is a known non-HTTP protocol.
-            let inspect = op.http_tls.is_some() || op.service == "unknown";
-            if !inspect {
-                continue;
-            }
+        // Inspect ports that are known HTTP, or unknown (could be any app),
+        // but skip ports whose catalog service is a known non-HTTP protocol.
+        let candidates: Vec<_> = open_ports
+            .iter()
+            .filter(|op| op.http_tls.is_some() || op.service == "unknown")
+            .collect();
+        progress.start_endpoints(candidates.len());
+        for op in candidates {
+            progress.inspecting(op.port);
             match endpoints::inspect_service(&target.url_host(), op.port, op.http_tls, &cfg).await {
-                Ok(r) => reports.push(r),
-                Err(e) => eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port),
+                Ok(r) => {
+                    progress.inspected(r.endpoints.len());
+                    reports.push(r);
+                }
+                Err(e) => {
+                    progress.inspected(0);
+                    eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port);
+                }
             }
         }
         reports
@@ -144,6 +169,7 @@ pub(crate) async fn scan_target(opts: &ScanOptions) -> anyhow::Result<ScanOutput
 
     let rendered_ip = ip.to_string();
     let report = report::assemble(&target.host, &rendered_ip, &open_ports, &services);
+    progress.set_phase(Phase::Done);
     Ok(ScanOutput {
         report,
         services,
