@@ -1,5 +1,4 @@
-//! `@` - a read-only reconnaissance CLI (the crate compiles as `at`; the
-//! binary is installed as `@`, which is the command you type).
+//! portscan - a read-only reconnaissance CLI.
 //!
 //! Point it at a single host and it reports what is
 //! exposed: open ports, discoverable HTTP endpoints, and whether those
@@ -26,7 +25,7 @@ async fn main() -> ExitCode {
     match run(args).await {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("@: error: {e:#}");
+            eprintln!("portscan: error: {e:#}");
             ExitCode::from(1)
         }
     }
@@ -40,7 +39,7 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
     let ip = ips[0];
     if ips.len() > 1 {
         eprintln!(
-            "@: note: `{}` resolved to {} addresses; scanning {}",
+            "portscan: note: `{}` resolved to {} addresses; scanning {}",
             target.host,
             ips.len(),
             ip
@@ -77,7 +76,7 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
             }
             match endpoints::inspect_service(&target.url_host(), op.port, op.http_tls, &cfg).await {
                 Ok(r) => reports.push(r),
-                Err(e) => eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port),
+                Err(e) => eprintln!("portscan: note: HTTP inspection of port {} failed: {e}", op.port),
             }
         }
         reports

@@ -63,7 +63,7 @@ impl Default for HttpConfig {
             active_rate_probe: false,
             active_rate_count: 15,
             strict_tls: false,
-            user_agent: concat!("at/", env!("CARGO_PKG_VERSION"), " (read-only recon)").to_string(),
+            user_agent: concat!("portscan/", env!("CARGO_PKG_VERSION"), " (read-only recon)").to_string(),
         }
     }
 }

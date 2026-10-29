@@ -242,7 +242,7 @@ fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
         Some(p) => format!("{}:{p}", report.target),
         None => report.target.clone(),
     };
-    let title = fit(&format!("@ {target}"), inner - cols(ip) - 1);
+    let title = fit(&target, inner - cols(ip) - 1);
     let mut head = Row::new(paint);
     head.add(ACCENT, "│ ");
     head.add("1", &title);

@@ -3,9 +3,6 @@ name: release
 # Builds prebuilt binaries for each supported target and attaches them to the
 # GitHub Release when a version tag is pushed. The curl/PowerShell installers
 # and the Homebrew formula download these archives.
-#
-# The archives ship the binary under its compiled name `at`; the installers
-# rename it to `@` at install time.
 
 on:
   push:
@@ -58,24 +55,24 @@ jobs:
         if: "!contains(matrix.target, 'windows')"
         shell: bash
         run: |
-          bin="target/${{ matrix.target }}/release/at"
-          tar -czf "at-${{ matrix.target }}.tar.gz" -C "$(dirname "$bin")" at
-          shasum -a 256 "at-${{ matrix.target }}.tar.gz" | tee "at-${{ matrix.target }}.tar.gz.sha256"
+          bin="target/${{ matrix.target }}/release/portscan"
+          tar -czf "portscan-${{ matrix.target }}.tar.gz" -C "$(dirname "$bin")" portscan
+          shasum -a 256 "portscan-${{ matrix.target }}.tar.gz" | tee "portscan-${{ matrix.target }}.tar.gz.sha256"
 
       - name: Package (windows)
         if: "contains(matrix.target, 'windows')"
         shell: bash
         run: |
-          bin="target/${{ matrix.target }}/release/at.exe"
-          7z a "at-${{ matrix.target }}.zip" "$bin"
-          certutil -hashfile "at-${{ matrix.target }}.zip" SHA256 > "at-${{ matrix.target }}.zip.sha256"
+          bin="target/${{ matrix.target }}/release/portscan.exe"
+          7z a "portscan-${{ matrix.target }}.zip" "$bin"
+          certutil -hashfile "portscan-${{ matrix.target }}.zip" SHA256 > "portscan-${{ matrix.target }}.zip.sha256"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: at-${{ matrix.target }}
+          name: portscan-${{ matrix.target }}
           path: |
-            at-${{ matrix.target }}.*
+            portscan-${{ matrix.target }}.*
 
   release:
     name: publish release

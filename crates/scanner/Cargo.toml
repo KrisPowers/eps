@@ -1,6 +1,6 @@
 [package]
 name = "scanner"
-description = "Target parsing, service catalog, and TCP connect port scanning for `@`."
+description = "Target parsing, service catalog, and TCP connect port scanning for portscan."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
