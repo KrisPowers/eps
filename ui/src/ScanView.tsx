@@ -17,6 +17,7 @@ export function ScanView({ scan, report, onAgain, onDelete }: {
         <h1>{scan.target}</h1>
         {ip && ip !== scan.target && <span className="muted mono">{ip}</span>}
         <StatusChip scan={scan} />
+        {/ --?[a-z]/.test(scan.command) && <code className="command-line">{scan.command}</code>}
         <div className="page-actions">
           <button type="button" className="btn secondary" disabled={going} onClick={onAgain}>
             <Icon name="refresh" size={18} /><span>Scan again</span>

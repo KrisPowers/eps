@@ -85,6 +85,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 400 14px/1.43
 h1, h2, h3, p { margin: 0; }
 a { color: var(--accent); text-decoration: none; }
 code, .mono { font-family: var(--mono); font-size: 13px; }
+.command-line { padding: 2px 8px; border-radius: 3px; background: var(--code); color: var(--text-2); }
 b { font-weight: 500; }
 .muted { color: var(--text-2); }
 .small { font-size: 12px; }
@@ -116,9 +117,9 @@ b { font-weight: 500; }
 
 /* The scan bar sits in the middle of the window, whatever is around it. */
 .command { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(576px, 40vw); margin: 0; }
-.command > .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #fff; pointer-events: none; }
+.command > .at { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #fff; font: 500 17px var(--mono); pointer-events: none; }
 .command input {
-  width: 100%; height: 40px; padding: 0 76px 0 40px; border: 1px solid transparent; border-radius: var(--radius);
+  width: 100%; height: 40px; padding: 0 76px 0 36px; border: 1px solid transparent; border-radius: var(--radius);
   background: var(--header-field); color: #fff; font: inherit; font-size: 15px;
 }
 .command input::placeholder { color: #fff; opacity: .92; }

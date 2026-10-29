@@ -3,7 +3,8 @@
 //!
 //! - `GET /api/scans`: every kept scan, newest first, with counts, and for
 //!   one still going, its `progress` (see `progress.rs`)
-//! - `POST /api/scans` `{ target, no_discovery?, probe_rate_limit?, strict_tls? }`: start one
+//! - `POST /api/scans` `{ command }`: start one. `command` is what you'd type
+//!   in a terminal, `@ 192.168.1.10 --no-discovery`; the `@` may be left out
 //! - `GET /api/scans/{id}`: one scan with its full report, or its progress
 //! - `DELETE /api/scans/{id}`: forget a finished scan
 //!
@@ -20,7 +21,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::extract::{Path, Request, State};
 use axum::http::{header, StatusCode, Uri};
@@ -28,13 +29,16 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
+use clap::error::ErrorKind;
+use clap::Parser;
 use scanner::target::Target;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::{Mutex, Semaphore};
 
 use crate::progress::Progress;
-use crate::{scan_target, ScanOptions};
+use crate::cli::Cli;
+use crate::{scan_options, scan_target, ScanOptions};
 
 /// Scans kept, newest first; older ones are dropped.
 const KEEP: usize = 100;
@@ -50,21 +54,13 @@ enum Status {
     Failed,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct Options {
-    #[serde(default)]
-    no_discovery: bool,
-    #[serde(default)]
-    probe_rate_limit: bool,
-    #[serde(default)]
-    strict_tls: bool,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Scan {
     id: String,
     target: String,
-    options: Options,
+    /// The line it was started with.
+    #[serde(default)]
+    command: String,
     status: Status,
     /// Unix milliseconds.
     created: u64,
@@ -98,7 +94,7 @@ impl Scan {
         json!({
             "id": self.id,
             "target": self.target,
-            "options": self.options,
+            "command": self.command,
             "status": self.status,
             "created": self.created,
             "finished": self.finished,
@@ -330,24 +326,48 @@ async fn remove(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response
 
 #[derive(Deserialize)]
 struct NewScan {
-    target: String,
-    #[serde(flatten)]
-    options: Options,
+    command: String,
+}
+
+/// Reads a line typed into the dashboard the way the terminal would: `@`, a
+/// target and any of the CLI's options. The `@` may be left out.
+fn parse_command(line: &str) -> Result<Cli, String> {
+    let mut words: Vec<&str> = line.split_whitespace().collect();
+    if words.first() == Some(&"@") {
+        words.remove(0);
+    }
+    let argv = std::iter::once("@").chain(words);
+    let args = Cli::try_parse_from(argv).map_err(|e| match e.kind() {
+        ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+            "the options are listed in the README".to_string()
+        }
+        _ => {
+            let text = e.to_string();
+            let first = text.lines().next().unwrap_or("");
+            first.trim_start_matches("error: ").to_string()
+        }
+    })?;
+    if args.serve.is_some() || args.paths.is_some() {
+        return Err("--serve and --paths only work in a terminal".into());
+    }
+    Ok(args)
 }
 
 async fn create(State(app): State<Arc<App>>, Json(req): Json<NewScan>) -> Response {
-    let target = req.target.trim().to_string();
-    if target.is_empty() {
-        return error(StatusCode::BAD_REQUEST, "enter a host, host:port or IP");
-    }
-    let parsed = match Target::parse(&target) {
+    let args = match parse_command(&req.command) {
+        Ok(a) => a,
+        Err(e) => return error(StatusCode::BAD_REQUEST, &e),
+    };
+    let parsed = match Target::parse(&args.target) {
         Ok(t) => t,
         Err(e) => return error(StatusCode::BAD_REQUEST, &e),
     };
+    let mut opts = scan_options(&args, None);
+    opts.target = app.scan_target(&parsed, &args.target);
     let scan = Scan {
         id: new_id(),
-        target: target.clone(),
-        options: req.options.clone(),
+        target: args.target.trim_start_matches('@').trim().to_string(),
+        command: req.command.trim().to_string(),
         status: Status::Queued,
         created: now_ms(),
         finished: None,
@@ -366,15 +386,14 @@ async fn create(State(app): State<Arc<App>>, Json(req): Json<NewScan>) -> Respon
         scans.truncate(KEEP);
         app.save(&scans);
     }
-    let run_as = app.scan_target(&parsed, &target);
-    tokio::spawn(execute(app, id, run_as, parsed.host, req.options));
+    tokio::spawn(execute(app, id, opts, parsed.host));
     (StatusCode::ACCEPTED, Json(summary)).into_response()
 }
 
 /// Runs one scan once a slot is free. The scan itself runs on its own
 /// thread and runtime, so a long one never holds up the API. `host` is the
 /// host as typed, which the report names even when `localhost` was swapped.
-async fn execute(app: Arc<App>, id: String, target: String, host: String, o: Options) {
+async fn execute(app: Arc<App>, id: String, opts: ScanOptions, host: String) {
     let _slot = app.slots.acquire().await;
     let progress = app
         .live
@@ -384,17 +403,6 @@ async fn execute(app: Arc<App>, id: String, target: String, host: String, o: Opt
         .cloned()
         .unwrap_or_default();
     app.update(&id, |s| s.status = Status::Running).await;
-    let opts = ScanOptions {
-        target,
-        no_discovery: o.no_discovery,
-        connect_timeout: Duration::from_millis(800),
-        http_timeout: Duration::from_secs(6),
-        concurrency: 256,
-        probe_rate_limit: o.probe_rate_limit,
-        burst: 15,
-        strict_tls: o.strict_tls,
-        paths: None,
-    };
     let (tx, rx) = tokio::sync::oneshot::channel::<Result<Value, String>>();
     std::thread::spawn(move || {
         let result = tokio::runtime::Builder::new_current_thread()

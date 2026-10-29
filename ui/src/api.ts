@@ -10,6 +10,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   scans: () => call<{ scans: ScanRow[] }>("/api/scans").then((r) => r.scans),
   scan: (id: string) => call<ScanDetail>(`/api/scans/${encodeURIComponent(id)}`),
-  start: (target: string) => call<ScanRow>("/api/scans", { method: "POST", body: JSON.stringify({ target }) }),
+  // `command` is what you'd type in a terminal: `@ 10.0.0.5 --no-discovery`.
+  start: (command: string) => call<ScanRow>("/api/scans", { method: "POST", body: JSON.stringify({ command }) }),
   remove: (id: string) => call<{ ok: boolean }>(`/api/scans/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
