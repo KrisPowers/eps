@@ -20,5 +20,7 @@ endpoints.workspace = true
 report.workspace = true
 clap.workspace = true
 tokio.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+axum.workspace = true
 anyhow.workspace = true

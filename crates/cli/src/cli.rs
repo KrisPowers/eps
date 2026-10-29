@@ -62,4 +62,18 @@ pub struct Cli {
     /// Exit with code 2 if any HIGH finding is reported (useful in CI).
     #[arg(long)]
     pub fail_on_high: bool,
+
+    /// Run the dashboard on this address instead of scanning: a web page for
+    /// starting scans and reading their reports (see README).
+    #[arg(long, value_name = "ADDR")]
+    pub serve: Option<String>,
+
+    /// With --serve: folder holding the built dashboard (`ui/dist`). Without
+    /// it only the API is served.
+    #[arg(long, value_name = "DIR", requires = "serve")]
+    pub web: Option<std::path::PathBuf>,
+
+    /// With --serve: folder to keep scan results in across restarts.
+    #[arg(long, value_name = "DIR", requires = "serve")]
+    pub data: Option<std::path::PathBuf>,
 }
