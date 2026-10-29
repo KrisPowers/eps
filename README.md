@@ -23,7 +23,40 @@ you can fix it before someone else finds it.
 > requests. It never writes, submits, logs in, mutates, or exploits anything. It
 > reports exposure; **you** decide what to do about it.
 
-## Install
+It comes two ways: a **dashboard** that runs in Docker, where you type a host into
+a search bar and watch the scan fill in, and a **CLI** for terminals and CI.
+
+## Dashboard
+
+Needs Docker with Compose v2 ([Docker Desktop](https://docs.docker.com/get-docker/)
+on Windows and macOS).
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/KrisPowers/portscan/main/compose.yaml -o compose.yaml
+docker compose up -d
+```
+
+Then open <http://localhost:8090>. Type a host, `host:port` or IP into the bar at
+the top and press Enter. While it runs, the page shows the port the scan has
+reached, then the open ports and endpoints as they turn up; when it's done, the
+findings, ports and endpoints, each endpoint with the same verdict blocks as the
+CLI. The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,
+`./portscan/data` next to `compose.yaml` elsewhere.
+
+- **This computer only.** The dashboard has no sign-in, so it's published on
+  `127.0.0.1` and answers only requests addressed to `localhost`, `127.0.0.1` or
+  `[::1]`. To reach it by another name, list it in `PORTSCAN_HOSTS`
+  (comma-separated), and put your own sign-in in front of it.
+- **Scanning this computer.** The scans run inside the container, so `localhost`
+  is sent to `host.docker.internal`, the computer running Docker
+  (`PORTSCAN_LOCALHOST`). Other hosts are reached the way the container reaches
+  any network.
+- **The CLI from the image.** Arguments run one scan instead of the dashboard:
+  `docker run --rm ghcr.io/krispowers/portscan 192.168.1.10`.
+
+From a checkout, `docker compose up -d --build` builds the image here instead.
+
+## CLI
 
 **macOS / Linux (curl):**
 
@@ -48,7 +81,7 @@ brew install krispowers/portscan/portscan
 [releases](https://github.com/KrisPowers/portscan/releases), extract it, and move
 `portscan` onto your `PATH`.
 
-### From source
+**From source:**
 
 ```sh
 cargo build --release -p cli
@@ -148,6 +181,7 @@ provider terms, even though portscan is read-only. You are responsible for how y
 cargo test        # unit tests
 cargo clippy      # lints
 cargo fmt         # formatting
+cd ui && npm ci && npm run build   # type-check and build the dashboard
 ```
 
 Workspace layout:
@@ -157,7 +191,10 @@ Workspace layout:
 - `crates/endpoints` - scheme detection, endpoint discovery, auth/TLS/rate-limit
   checks, and the conventional endpoint catalog (`paths`).
 - `crates/report` - severity model and text/JSON rendering.
-- `crates/cli` - the `portscan` binary.
+- `crates/cli` - the `portscan` binary, and `--serve`, the dashboard's server
+  and API (`serve.rs`).
+- `ui/` - the dashboard (React, TypeScript and Vite). `npm run dev` in `ui/`
+  serves it with the API proxied to `portscan --serve 127.0.0.1:8090`.
 - `Formula/` - the Homebrew formula.
 - `testbed/` - a local target to scan (see below).
 

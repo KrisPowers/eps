@@ -1,0 +1,27 @@
+# portscan's dashboard in Docker. `docker compose up -d` runs the published
+# image; from a checkout, `docker compose up -d --build` builds it here.
+# Then open http://localhost:8090 on this computer.
+#
+# Scans run from inside the container. Other hosts are reached as usual;
+# `localhost` is this computer, reached as host.docker.internal.
+name: portscan
+services:
+  portscan:
+    image: ghcr.io/krispowers/portscan:latest
+    build: .
+    container_name: portscan
+    restart: unless-stopped
+    ports:
+      # This computer only: the dashboard has no sign-in.
+      - "127.0.0.1:8090:8090"
+    extra_hosts:
+      # Docker Desktop has this name already; Linux needs it added.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Kept scans: %LOCALAPPDATA%\portscan\data on Windows, ./portscan/data
+      # next to this file elsewhere.
+      - ${LOCALAPPDATA:-.}/portscan/data:/data
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
