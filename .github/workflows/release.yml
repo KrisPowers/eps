@@ -3,6 +3,9 @@ name: release
 # Builds prebuilt binaries for each supported target and attaches them to the
 # GitHub Release when a version tag is pushed. The curl/PowerShell installers
 # and the Homebrew formula download these archives.
+#
+# The archives ship the binary as `portscan`; the installers install it as
+# `@`, the command you type.
 
 on:
   push:

@@ -1,10 +1,11 @@
 #!/usr/bin/env sh
-# portscan installer (Unix: macOS and Linux).
+# portscan installer (Unix: macOS and Linux). Installs the binary as `@`, the
+# command you type.
 #
 #   curl -fsSL https://raw.githubusercontent.com/KrisPowers/portscan/main/install.sh | sh
 #
 # Override with env vars:
-#   PORTSCAN_INSTALL_DIR   directory to install the binary into
+#   PORTSCAN_INSTALL_DIR   directory to install `@` into
 #   PORTSCAN_VERSION       release tag to install, e.g. v0.1.0 (default: latest)
 set -eu
 
@@ -13,7 +14,7 @@ dir="${PORTSCAN_INSTALL_DIR:-$HOME/.local/bin}"
 version="${PORTSCAN_VERSION:-latest}"
 
 say() { printf '%s\n' "$*"; }
-err() { printf 'portscan: error: %s\n' "$*" >&2; exit 1; }
+err() { printf '@: error: %s\n' "$*" >&2; exit 1; }
 
 detect_target() {
   os="$(uname -s)"
@@ -55,9 +56,10 @@ main() {
   tar -xzf "$tmp/$archive" -C "$tmp" || err "could not extract $archive"
 
   mkdir -p "$dir"
-  install -m 0755 "$tmp/portscan" "$dir/portscan" 2>/dev/null \
-    || { cp "$tmp/portscan" "$dir/portscan" && chmod 0755 "$dir/portscan"; }
-  say "Installed: $dir/portscan"
+  # The archive ships the binary as `portscan`; install it as `@`.
+  install -m 0755 "$tmp/portscan" "$dir/@" 2>/dev/null \
+    || { cp "$tmp/portscan" "$dir/@" && chmod 0755 "$dir/@"; }
+  say "Installed: $dir/@"
 
   case ":$PATH:" in
     *":$dir:"*) ;;
@@ -67,7 +69,7 @@ main() {
   esac
 
   say ""
-  say "Try it:  portscan 127.0.0.1"
+  say "Try it:  @ 127.0.0.1"
 }
 
 main "$@"

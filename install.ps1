@@ -1,4 +1,5 @@
-# portscan installer (Windows, PowerShell).
+# portscan installer (Windows, PowerShell). Installs the binary as `@.exe`, so
+# the command you type is `@`.
 #
 #   irm https://raw.githubusercontent.com/KrisPowers/portscan/main/install.ps1 | iex
 #
@@ -15,7 +16,7 @@ $dir     = if ($env:PORTSCAN_INSTALL_DIR) { $env:PORTSCAN_INSTALL_DIR } else { J
 $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
     'AMD64' { 'x86_64' }
     'ARM64' { 'aarch64' }
-    default { throw "portscan: unsupported architecture: $($env:PROCESSOR_ARCHITECTURE)" }
+    default { throw "@: unsupported architecture: $($env:PROCESSOR_ARCHITECTURE)" }
 }
 
 $archive = "portscan-$arch-pc-windows-msvc.zip"
@@ -31,8 +32,9 @@ try {
     Invoke-RestMethod -Uri $url -OutFile $zip
     Expand-Archive -Path $zip -DestinationPath $tmp -Force
 
-    Copy-Item -Path (Join-Path $tmp 'portscan.exe') -Destination (Join-Path $dir 'portscan.exe') -Force
-    Write-Host "Installed: $dir\portscan.exe"
+    # The archive ships the binary as `portscan.exe`; install it as `@.exe`.
+    Copy-Item -Path (Join-Path $tmp 'portscan.exe') -Destination (Join-Path $dir '@.exe') -Force
+    Write-Host "Installed: $dir\@.exe"
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath -notlike "*$dir*") {
@@ -40,9 +42,41 @@ try {
         Write-Host "Added $dir to your user PATH (restart your shell to pick it up)."
     }
 
+    # PowerShell's parser rejects a bare `@`, so the profile wraps the host's
+    # line reader and rewrites `@ <target>` into a call to @.exe after the line
+    # is read. The screen and history keep what was typed. An older block is
+    # replaced in place.
+    $profilePath = $PROFILE.CurrentUserCurrentHost
+    $block = @'
+# >>> @ >>>
+# Lets `@ <target>` run @.exe. PowerShell's parser rejects a bare `@`, so the
+# line is rewritten after it is read and before it is parsed. The screen and
+# history keep what was typed. `@(...)`, `@{...}` and here-strings are left alone.
+$readLine = (Get-Command PSConsoleHostReadLine -CommandType Function -ErrorAction SilentlyContinue).ScriptBlock
+if ($readLine) {
+    Set-Item function:global:PSConsoleHostReadLine -Value {
+        $line = & $readLine
+        if ($line -match '^\s*@(\s|$)') { $line -replace '^\s*@', "& '@.exe'" } else { $line }
+    }.GetNewClosure()
+}
+Remove-Variable readLine
+# <<< @ <<<
+'@
+    $existing = if (Test-Path $profilePath) { Get-Content -Raw $profilePath } else { '' }
+    $pattern = '(?s)# >>> @ >>>.*?# <<< @ <<<'
+    if ($existing -match $pattern) {
+        $updated = [regex]::Replace($existing, $pattern, { $block })
+        Set-Content -Path $profilePath -Value $updated.TrimEnd() -Encoding utf8
+        Write-Host "Updated the @ command in $profilePath."
+    } else {
+        New-Item -ItemType Directory -Force -Path (Split-Path $profilePath) | Out-Null
+        Add-Content -Path $profilePath -Value "`r`n$block" -Encoding utf8
+        Write-Host "Added the @ command to $profilePath."
+    }
+
     Write-Host ""
     Write-Host "Try it (in a new shell):"
-    Write-Host "  portscan 127.0.0.1"
+    Write-Host "  @ 127.0.0.1"
 }
 finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue

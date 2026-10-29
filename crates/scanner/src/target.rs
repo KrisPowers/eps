@@ -1,7 +1,7 @@
 //! Parsing of the `host[:port]` target syntax.
 //!
-//! Accepted forms (a leading `@`, from when the command was `@`, is still
-//! accepted and ignored):
+//! Accepted forms (a leading `@`, the command's own name, is optional and
+//! ignored, so `@10.0.0.1` and `10.0.0.1` are the same target):
 //!
 //! ```text
 //! @192.168.1.10          -> scan every port on an IPv4 host
@@ -27,7 +27,8 @@ pub struct Target {
 impl Target {
     /// Parse a raw argument such as `@10.0.0.1:8080` into a [`Target`].
     pub fn parse(raw: &str) -> Result<Target, String> {
-        let s = raw.trim().strip_prefix('@').unwrap_or(raw.trim());
+        let s = raw.trim();
+        let s = s.strip_prefix('@').unwrap_or(s).trim_start();
         if s.is_empty() {
             return Err("empty target".to_string());
         }

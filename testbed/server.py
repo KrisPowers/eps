@@ -12,9 +12,9 @@ non-HTTP service to report.
 
 Then, in another shell:
 
-    portscan localhost:8080
-    portscan localhost:8080 --probe-rate-limit
-    portscan localhost
+    @ localhost:8080
+    @ localhost:8080 --probe-rate-limit
+    @ localhost
 """
 
 import argparse
