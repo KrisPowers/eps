@@ -1,0 +1,8 @@
+.git
+.github
+target
+testbed
+Formula
+**/node_modules
+# Rebuilt from ui/ inside the image.
+ui/dist
