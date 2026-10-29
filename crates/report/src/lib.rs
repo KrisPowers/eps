@@ -10,7 +10,7 @@ use serde::Serialize;
 
 mod render;
 
-pub use render::render_human;
+pub use render::{render_human, Posture};
 
 /// Impact tier for a finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -62,6 +62,16 @@ pub struct EndpointView {
     pub content_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    /// The verdict per security control, as the text report colors it.
+    pub controls: Controls,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Controls {
+    pub auth: Posture,
+    pub jwt: Posture,
+    pub rate: Posture,
+    pub https: Posture,
 }
 
 /// Non-HTTP services whose public exposure is usually a serious problem, with
@@ -242,6 +252,12 @@ pub fn assemble(
                 server: ep.server.clone(),
                 content_type: ep.content_type.clone(),
                 location: ep.location.clone(),
+                controls: Controls {
+                    auth: render::auth(ep),
+                    jwt: render::jwt(ep),
+                    rate: render::rate(ep),
+                    https: render::https(ep),
+                },
             });
         }
     }

@@ -5,6 +5,7 @@
 use std::io::IsTerminal;
 
 use endpoints::{AuthState, Endpoint, ServiceReport};
+use serde::Serialize;
 
 use crate::{risky_service, Report};
 
@@ -94,8 +95,9 @@ fn status_tint(status: u16) -> &'static str {
 }
 
 /// How far a security control is set up on one endpoint.
-#[derive(Clone, Copy)]
-enum Posture {
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Posture {
     /// Set up and holding.
     Configured,
     /// Set up, but bypassable or weakened.
@@ -158,7 +160,7 @@ fn scheme_is(ep: &Endpoint, name: &str) -> bool {
 
 /// A credential gate (401/403 or a login redirect). Basic over plain HTTP is
 /// insecure: the password crosses the wire readable.
-fn auth(ep: &Endpoint) -> Posture {
+pub(crate) fn auth(ep: &Endpoint) -> Posture {
     match ep.auth {
         AuthState::Protected if !ep.tls && scheme_is(ep, "basic") => Posture::Insecure,
         AuthState::Protected => Posture::Configured,
@@ -169,7 +171,7 @@ fn auth(ep: &Endpoint) -> Posture {
 }
 
 /// Bearer-token (JWT) auth, insecure when the token travels in the clear.
-fn jwt(ep: &Endpoint) -> Posture {
+pub(crate) fn jwt(ep: &Endpoint) -> Posture {
     if !scheme_is(ep, "bearer") {
         Posture::Missing
     } else if ep.tls {
@@ -181,7 +183,7 @@ fn jwt(ep: &Endpoint) -> Posture {
 
 /// Rate limiting: enforced (a 429 seen) or advertised by headers, insecure
 /// when advertised but not holding under the opt-in burst.
-fn rate(ep: &Endpoint) -> Posture {
+pub(crate) fn rate(ep: &Endpoint) -> Posture {
     let rl = &ep.rate_limit;
     let advertised = !rl.headers_seen.is_empty() || rl.retry_after.is_some();
     match rl.active {
@@ -193,7 +195,7 @@ fn rate(ep: &Endpoint) -> Posture {
     }
 }
 
-fn https(ep: &Endpoint) -> Posture {
+pub(crate) fn https(ep: &Endpoint) -> Posture {
     if ep.tls {
         Posture::Configured
     } else {
