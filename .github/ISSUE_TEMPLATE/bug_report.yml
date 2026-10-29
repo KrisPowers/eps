@@ -1,0 +1,32 @@
+name: Bug report
+description: Something doesn't work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Leave out hosts and addresses you don't want public. Security problems go through the private report linked from the security policy instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you scanned (or a stand-in), what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The report, `--json` output, or `docker logs portscan`.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`portscan --version`, the image tag, or the commit you're running."
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you run it
+      options:
+        - CLI
+        - Dashboard (Docker)
