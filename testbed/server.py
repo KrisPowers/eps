@@ -1,4 +1,4 @@
-"""Local target for trying `@` against something app-shaped.
+"""Local target for trying portscan against something app-shaped.
 
 Serves a spread of conventional endpoints behind different security setups:
 open, HTTP Basic, Bearer JWT, forbidden, login redirects, advertised and
@@ -12,9 +12,9 @@ non-HTTP service to report.
 
 Then, in another shell:
 
-    @ localhost:8080
-    @ localhost:8080 --probe-rate-limit
-    @ localhost
+    portscan localhost:8080
+    portscan localhost:8080 --probe-rate-limit
+    portscan localhost
 """
 
 import argparse

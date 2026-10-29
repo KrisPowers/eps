@@ -1,4 +1,4 @@
-//! Core of `@`: parsing the `@host[:port]` target, the well-known service
+//! Core of portscan: parsing the `host[:port]` target, the well-known service
 //! catalog, and the async TCP connect port scanner.
 
 pub mod ports;

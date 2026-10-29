@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 license = "Apache-2.0"
-repository = "https://github.com/krispowers/at"
+repository = "https://github.com/KrisPowers/portscan"
 
 [workspace.dependencies]
 scanner = { path = "crates/scanner" }

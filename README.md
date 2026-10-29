@@ -1,9 +1,10 @@
-# @
+# portscan
 
-**`@ <ip>[:port]` - point it at a host and it tells you what's exposed.**
+**`portscan <host>[:port]` - point it at a host and it tells you what's exposed.**
 
-`@` is a read-only reconnaissance CLI for network and software engineers. Give it
-an IP address (with or without a port) and it reports, in one command:
+portscan is a read-only reconnaissance tool for network and software engineers.
+Give it a host or IP address (with or without a port) and it reports, in one
+command:
 
 - **Open ports** - a TCP *connect* scan (no raw sockets, no root) across all
   65,535 ports.
@@ -18,80 +19,54 @@ The goal is to surface low-level exposure early - an endpoint that shouldn't be
 open, a port that shouldn't be reachable, a sensitive path with no auth gate - so
 you can fix it before someone else finds it.
 
-> **`at` is strictly read-only.** It makes ordinary TCP connections and HTTP `GET`
+> **portscan is strictly read-only.** It makes ordinary TCP connections and HTTP `GET`
 > requests. It never writes, submits, logs in, mutates, or exploits anything. It
 > reports exposure; **you** decide what to do about it.
 
 ## Install
 
-The crate compiles as `at` (a literal `@` crate name is rejected by the Rust
-compiler, which reads `@`-prefixed tokens as argument files). The **installed
-binary is named `@`**, so the command you type is `@`.
-
-> Downloads are served from `at.krispowers.dev`. The repo is private for now, so
-> these paths will start working once the first public release is cut. To build
-> locally in the meantime, see [From source](#from-source).
-
 **macOS / Linux (curl):**
 
 ```sh
-curl -fsSL https://at.krispowers.dev/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/KrisPowers/portscan/main/install.sh | sh
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://at.krispowers.dev/install.ps1 | iex
+irm https://raw.githubusercontent.com/KrisPowers/portscan/main/install.ps1 | iex
 ```
-
-PowerShell's parser rejects a bare `@`, so the installer adds a small block to
-your profile that runs `@ <target>` as `@.exe`. What you typed stays on screen
-and in history as `@ <target>`.
 
 **Homebrew:**
 
 ```sh
-brew tap krispowers/at https://github.com/krispowers/at
-brew install krispowers/at/at
+brew tap krispowers/portscan https://github.com/KrisPowers/portscan
+brew install krispowers/portscan/portscan
 ```
 
 **Prebuilt binaries:** download the archive for your platform from the
-[releases](https://github.com/krispowers/at/releases), extract it, and move the
-`at` binary onto your `PATH` renamed to `@` (`@.exe` on Windows).
+[releases](https://github.com/KrisPowers/portscan/releases), extract it, and move
+`portscan` onto your `PATH`.
 
 ### From source
 
 ```sh
 cargo build --release -p cli
-cp target/release/at ~/.local/bin/@        # or anywhere on your PATH
+cp target/release/portscan ~/.local/bin/   # or anywhere on your PATH
 ```
-
-Make sure the install dir is on your `PATH` (`~/.local/bin` by default).
 
 ## Usage
 
 ```sh
-@                         # scan this machine (localhost)
-@ 192.168.1.10            # scan all 65535 ports, then inspect any HTTP services
-@ 192.168.1.10:8080       # inspect a single pinned port
-@ api.internal --json     # machine-readable output for pipelines/CI
-@ 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
+portscan                         # scan this machine (localhost)
+portscan 192.168.1.10            # scan all 65535 ports, then inspect any HTTP services
+portscan 192.168.1.10:8080       # inspect a single pinned port
+portscan api.internal --json     # machine-readable output for pipelines/CI
+portscan 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
 ```
 
-The target follows the command with a space (`@ 10.0.0.5`), as any command takes
-its argument. A leading `@` on the target itself is also accepted (`@ @10.0.0.5`).
 IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
 `2001:db8::1` on its own. Hostnames are resolved via the system resolver.
-
-> **Glued form?** A single token like `@10.0.0.5` (no space) can't invoke a binary
-> named `@` - the shell treats the whole token as the command name. If you want
-> that exact ergonomics, add a shell function to your `~/.zshrc`:
->
-> ```sh
-> @() { command @ "$@"; }   # lets `@ 10.0.0.5` work even if @ isn't first on PATH
-> ```
->
-> True no-space `@10.0.0.5` isn't possible in a standard shell; use `@ 10.0.0.5`.
 
 ### Options
 
@@ -120,7 +95,7 @@ Findings are prioritized by potential impact:
   rate-limit headers; no throttling observed under an opt-in burst.
 - **INFO** - positive signals, e.g. a sensitive path that is correctly behind auth.
 
-`at` reports *exposure and posture*, never intent - it can't know whether a given
+portscan reports *exposure and posture*, never intent - it can't know whether a given
 host is meant to be public. Severities are there to help you triage; the call is
 yours.
 
@@ -132,12 +107,12 @@ green configured, yellow configured but bypassable or weakened, red not
 configured, white when the response does not show either way. Piped output or
 `NO_COLOR` drops the color and marks each block `+`, `~`, `-` or `?` instead,
 as in the example below. When the target pins a port
-(`@ host:8080`), the ports section is left out and only that port's endpoints
+(`portscan host:8080`), the ports section is left out and only that port's endpoints
 are shown.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ @ api.internal                                                   10.0.0.42 │
+│ api.internal                                                     10.0.0.42 │
 │ 2 open ports  ·  3 endpoints                                               │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -165,7 +140,7 @@ ENDPOINTS  http://api.internal:8080 ──────────────�
 
 Scan only hosts you own or are **explicitly authorized** to assess. Port scanning
 and endpoint probing against systems you don't control may be unlawful and against
-provider terms, even though `at` is read-only. You are responsible for how you use it.
+provider terms, even though portscan is read-only. You are responsible for how you use it.
 
 ## Development
 
@@ -177,12 +152,12 @@ cargo fmt         # formatting
 
 Workspace layout:
 
-- `crates/scanner` - parse the `@host[:port]` syntax (`target`), the service
+- `crates/scanner` - parse the `host[:port]` syntax (`target`), the service
   catalog (`ports`), and the async TCP connect scanner (`scan`).
 - `crates/endpoints` - scheme detection, endpoint discovery, auth/TLS/rate-limit
   checks, and the conventional endpoint catalog (`paths`).
 - `crates/report` - severity model and text/JSON rendering.
-- `crates/cli` - the CLI binary, installed as `@`.
+- `crates/cli` - the `portscan` binary.
 - `Formula/` - the Homebrew formula.
 - `testbed/` - a local target to scan (see below).
 
@@ -195,10 +170,10 @@ open. A fake Redis listens on `6379` so a full scan has a risky service to show.
 Nothing behind the endpoints is real.
 
 ```sh
-python testbed/server.py              # HTTP on 127.0.0.1:8080
-@ localhost:8080                      # endpoints on the testbed
-@ localhost:8080 --probe-rate-limit   # /v1 throttles after 5 requests in 10s
-@ localhost                           # full scan, picks up the fake Redis
+python testbed/server.py                     # HTTP on 127.0.0.1:8080
+portscan localhost:8080                      # endpoints on the testbed
+portscan localhost:8080 --probe-rate-limit   # /v1 throttles after 5 requests in 10s
+portscan localhost                           # full scan, picks up the fake Redis
 ```
 
 ## License

@@ -1,7 +1,7 @@
-//! Parsing of the `@host[:port]` target syntax.
+//! Parsing of the `host[:port]` target syntax.
 //!
-//! Accepted forms (the leading `@` is the tool's signature prefix and is
-//! optional but canonical):
+//! Accepted forms (a leading `@`, from when the command was `@`, is still
+//! accepted and ignored):
 //!
 //! ```text
 //! @192.168.1.10          -> scan every port on an IPv4 host

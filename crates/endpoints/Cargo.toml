@@ -1,6 +1,6 @@
 [package]
 name = "endpoints"
-description = "HTTP(S) endpoint discovery and auth/TLS/rate-limit posture checks for `@`."
+description = "HTTP(S) endpoint discovery and auth/TLS/rate-limit posture checks for portscan."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
