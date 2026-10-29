@@ -2,18 +2,18 @@
 
 use clap::Parser;
 
-/// portscan - point it at a host and it reports what's exposed.
+/// @ - point it at a host and it reports what's exposed.
 ///
 /// Read-only recon for your own infrastructure: scans every TCP port, discovers
 /// conventional HTTP endpoints, and checks each for auth, TLS, and rate
 /// limiting. It never writes, submits, or mutates anything.
 #[derive(Parser, Debug)]
 #[command(
-    name = "portscan",
+    name = "@",
     version,
-    about = "Read-only recon: `portscan <host>[:port]` reports exposed ports and endpoint posture.",
+    about = "Read-only recon: `@ <host>[:port]` reports exposed ports and endpoint posture.",
     long_about = None,
-    after_help = "EXAMPLES:\n  portscan                      scan this machine (localhost)\n  portscan 192.168.1.10         scan all 65535 ports + inspect HTTP services\n  portscan 192.168.1.10:8080    inspect a single port\n  portscan 10.0.0.5 --json      machine-readable output\n\nUse only against hosts you own or are explicitly authorized to test."
+    after_help = "EXAMPLES:\n  @                        scan this machine (localhost)\n  @ 192.168.1.10           scan all 65535 ports + inspect HTTP services\n  @ 192.168.1.10:8080      inspect a single port\n  @ 10.0.0.5 --json        machine-readable output\n\nUse only against hosts you own or are explicitly authorized to test."
 )]
 pub struct Cli {
     /// Target host, host:port, or [ipv6]:port.

@@ -1,4 +1,4 @@
-# Homebrew formula for portscan.
+# Homebrew formula for portscan, installed as the command `@`.
 #
 # This repo doubles as its own tap:
 #
@@ -38,10 +38,11 @@ class Portscan < Formula
   end
 
   def install
-    bin.install "portscan"
+    # The archive ships the binary as `portscan`; install it as `@`.
+    bin.install "portscan" => "@"
   end
 
   test do
-    assert_match "recon", shell_output("#{bin}/portscan --help")
+    assert_match "recon", shell_output("#{bin}/@ --help")
   end
 end

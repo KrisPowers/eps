@@ -10,6 +10,9 @@ readme = "../../README.md"
 keywords = ["security", "recon", "network", "scanner", "cli"]
 categories = ["command-line-utilities"]
 
+# Installed as `@` (see install.sh, install.ps1 and the Homebrew formula), so the
+# typed command is `@`. A crate or binary can't be named `@`: rustc reads
+# `@`-prefixed arguments as argument files.
 [[bin]]
 name = "portscan"
 path = "src/main.rs"

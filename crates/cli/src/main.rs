@@ -1,4 +1,5 @@
-//! portscan - a read-only reconnaissance CLI.
+//! portscan - a read-only reconnaissance CLI. The compiled binary is
+//! `portscan`; it is installed as `@`, which is the command you type.
 //!
 //! Point it at a single host and it reports what is
 //! exposed: open ports, discoverable HTTP endpoints, and whether those
@@ -28,7 +29,7 @@ async fn main() -> ExitCode {
     match run(args).await {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("portscan: error: {e:#}");
+            eprintln!("@: error: {e:#}");
             ExitCode::from(1)
         }
     }
@@ -110,7 +111,7 @@ pub(crate) async fn scan_target(
     let ip = ips[0];
     if ips.len() > 1 {
         eprintln!(
-            "portscan: note: `{}` resolved to {} addresses; scanning {}",
+            "@: note: `{}` resolved to {} addresses; scanning {}",
             target.host,
             ips.len(),
             ip
@@ -159,7 +160,7 @@ pub(crate) async fn scan_target(
                 }
                 Err(e) => {
                     progress.inspected(0);
-                    eprintln!("portscan: note: HTTP inspection of port {} failed: {e}", op.port);
+                    eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port);
                 }
             }
         }

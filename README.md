@@ -1,9 +1,9 @@
 # portscan
 
-**`portscan <host>[:port]` - point it at a host and it tells you what's exposed.**
+**`@ <host>[:port]` - point it at a host and it tells you what's exposed.**
 
 portscan is a read-only reconnaissance tool for network and software engineers.
-Give it a host or IP address (with or without a port) and it reports, in one
+Its command is `@`. Give it a host or IP address (with or without a port) and it reports, in one
 command:
 
 - **Open ports** - a TCP *connect* scan (no raw sockets, no root) across all
@@ -58,6 +58,8 @@ From a checkout, `docker compose up -d --build` builds the image here instead.
 
 ## CLI
 
+The binary is built as `portscan` and installed as `@`, the command you type.
+
 **macOS / Linux (curl):**
 
 ```sh
@@ -70,6 +72,10 @@ curl -fsSL https://raw.githubusercontent.com/KrisPowers/portscan/main/install.sh
 irm https://raw.githubusercontent.com/KrisPowers/portscan/main/install.ps1 | iex
 ```
 
+PowerShell's parser rejects a bare `@`, so the installer adds a small block to
+your profile that runs `@ <target>` as `@.exe`. What you typed stays on screen
+and in history as `@ <target>`.
+
 **Homebrew:**
 
 ```sh
@@ -79,23 +85,23 @@ brew install krispowers/portscan/portscan
 
 **Prebuilt binaries:** download the archive for your platform from the
 [releases](https://github.com/KrisPowers/portscan/releases), extract it, and move
-`portscan` onto your `PATH`.
+`portscan` onto your `PATH` renamed to `@` (`@.exe` on Windows).
 
 **From source:**
 
 ```sh
 cargo build --release -p cli
-cp target/release/portscan ~/.local/bin/   # or anywhere on your PATH
+cp target/release/portscan ~/.local/bin/@   # or anywhere on your PATH
 ```
 
 ## Usage
 
 ```sh
-portscan                         # scan this machine (localhost)
-portscan 192.168.1.10            # scan all 65535 ports, then inspect any HTTP services
-portscan 192.168.1.10:8080       # inspect a single pinned port
-portscan api.internal --json     # machine-readable output for pipelines/CI
-portscan 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
+@                         # scan this machine (localhost)
+@ 192.168.1.10            # scan all 65535 ports, then inspect any HTTP services
+@ 192.168.1.10:8080       # inspect a single pinned port
+@ api.internal --json     # machine-readable output for pipelines/CI
+@ 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
 ```
 
 IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
@@ -140,12 +146,12 @@ green configured, yellow configured but bypassable or weakened, red not
 configured, white when the response does not show either way. Piped output or
 `NO_COLOR` drops the color and marks each block `+`, `~`, `-` or `?` instead,
 as in the example below. When the target pins a port
-(`portscan host:8080`), the ports section is left out and only that port's endpoints
+(`@ host:8080`), the ports section is left out and only that port's endpoints
 are shown.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ api.internal                                                     10.0.0.42 │
+│ @ api.internal                                                   10.0.0.42 │
 │ 2 open ports  ·  3 endpoints                                               │
 └────────────────────────────────────────────────────────────────────────────┘
 
@@ -191,7 +197,7 @@ Workspace layout:
 - `crates/endpoints` - scheme detection, endpoint discovery, auth/TLS/rate-limit
   checks, and the conventional endpoint catalog (`paths`).
 - `crates/report` - severity model and text/JSON rendering.
-- `crates/cli` - the `portscan` binary, and `--serve`, the dashboard's server
+- `crates/cli` - the binary (built as `portscan`, installed as `@`), and `--serve`, the dashboard's server
   and API (`serve.rs`).
 - `ui/` - the dashboard (React, TypeScript and Vite). `npm run dev` in `ui/`
   serves it with the API proxied to `portscan --serve 127.0.0.1:8090`.
@@ -207,10 +213,10 @@ open. A fake Redis listens on `6379` so a full scan has a risky service to show.
 Nothing behind the endpoints is real.
 
 ```sh
-python testbed/server.py                     # HTTP on 127.0.0.1:8080
-portscan localhost:8080                      # endpoints on the testbed
-portscan localhost:8080 --probe-rate-limit   # /v1 throttles after 5 requests in 10s
-portscan localhost                           # full scan, picks up the fake Redis
+python testbed/server.py              # HTTP on 127.0.0.1:8080
+@ localhost:8080                      # endpoints on the testbed
+@ localhost:8080 --probe-rate-limit   # /v1 throttles after 5 requests in 10s
+@ localhost                           # full scan, picks up the fake Redis
 ```
 
 ## License
