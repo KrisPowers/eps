@@ -64,9 +64,9 @@ export function App() {
       .catch((e) => setToast((e as Error).message));
   }, [doneId, reports]);
 
-  const start = async (target: string) => {
+  const start = async (command: string) => {
     try {
-      const row = await api.start(target);
+      const row = await api.start(command);
       await load();
       go(row.id);
     } catch (e) {
@@ -117,7 +117,7 @@ export function App() {
             <div className="callout bad"><Icon name="error" /><span>Can't reach portscan: {problem}</span></div>
           )}
           {selected ? (
-            <ScanView scan={selected} report={reports[selected.id]} onAgain={() => start(selected.target)} onDelete={() => remove(selected)} />
+            <ScanView scan={selected} report={reports[selected.id]} onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
           ) : (
             scans && <Home onScan={start} />
           )}
@@ -131,8 +131,9 @@ export function App() {
   );
 }
 
-// ScanBar is the header's search box: type a target, press Enter, it scans.
-function ScanBar({ onScan }: { onScan: (target: string) => Promise<void> }) {
+// ScanBar is the header's command line: the `@` is already there, type a
+// target and any of the CLI's options, press Enter, it scans.
+function ScanBar({ onScan }: { onScan: (command: string) => Promise<void> }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -151,16 +152,16 @@ function ScanBar({ onScan }: { onScan: (target: string) => Promise<void> }) {
   return (
     <form className="command" role="search" autoComplete="off" onSubmit={async (e) => {
       e.preventDefault();
-      const target = q.trim();
-      if (!target || busy) return;
+      const line = q.trim();
+      if (busy) return;
       setBusy(true);
-      await onScan(target);
+      await onScan(line.startsWith("@") ? line : "@ " + line);
       setBusy(false);
       setQ("");
       input.current?.blur();
     }}>
-      <Icon name="search" />
-      <input ref={input} type="text" name="scan-target" aria-label="Host to scan" placeholder="Scan a host, host:port or IP"
+      <span className="at" aria-hidden="true">@</span>
+      <input ref={input} type="text" name="scan-command" aria-label="Scan command" placeholder="host[:port] [options]"
         autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-1p-ignore data-lpignore="true"
         value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Escape" && input.current?.blur()} />
       {busy ? <span className="spinner" aria-label="Starting" /> : <kbd>Ctrl+K</kbd>}
@@ -168,12 +169,12 @@ function ScanBar({ onScan }: { onScan: (target: string) => Promise<void> }) {
   );
 }
 
-function Home({ onScan }: { onScan: (target: string) => Promise<void> }) {
+function Home({ onScan }: { onScan: (command: string) => Promise<void> }) {
   return (
     <div className="home">
       <Icon name="lan" size={48} />
       <h1>Scan a host to see what it exposes</h1>
-      <button type="button" className="btn primary" onClick={() => onScan("localhost")}>
+      <button type="button" className="btn primary" onClick={() => onScan("@")}>
         <Icon name="search" size={18} /><span>Scan this computer</span>
       </button>
       <p className="muted small">Scan only hosts you own or are allowed to test.</p>

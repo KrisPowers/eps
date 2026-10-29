@@ -44,17 +44,7 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
         Some(file) => Some(load_paths(file)?),
         None => None,
     };
-    let opts = ScanOptions {
-        target: args.target.clone(),
-        no_discovery: args.no_discovery,
-        connect_timeout: Duration::from_millis(args.connect_timeout),
-        http_timeout: Duration::from_secs(args.http_timeout),
-        concurrency: args.concurrency,
-        probe_rate_limit: args.probe_rate_limit,
-        burst: args.burst,
-        strict_tls: args.strict_tls,
-        paths,
-    };
+    let opts = scan_options(&args, paths);
     let out = scan_target(&opts, &Progress::default()).await?;
 
     if args.json {
@@ -87,6 +77,21 @@ pub(crate) struct ScanOptions {
     pub strict_tls: bool,
     /// Replaces the built-in endpoint paths when set.
     pub paths: Option<Vec<PathSpec>>,
+}
+
+/// The scan a command line asks for, with the `--paths` list already read.
+pub(crate) fn scan_options(args: &Cli, paths: Option<Vec<PathSpec>>) -> ScanOptions {
+    ScanOptions {
+        target: args.target.clone(),
+        no_discovery: args.no_discovery,
+        connect_timeout: Duration::from_millis(args.connect_timeout),
+        http_timeout: Duration::from_secs(args.http_timeout),
+        concurrency: args.concurrency,
+        probe_rate_limit: args.probe_rate_limit,
+        burst: args.burst,
+        strict_tls: args.strict_tls,
+        paths,
+    }
 }
 
 pub(crate) struct ScanOutput {

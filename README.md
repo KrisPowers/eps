@@ -36,8 +36,11 @@ curl -fsSL https://raw.githubusercontent.com/KrisPowers/portscan/main/compose.ya
 docker compose up -d
 ```
 
-Then open <http://localhost:8090>. Type a host, `host:port` or IP into the bar at
-the top and press Enter. While it runs, the page shows the port the scan has
+Then open <http://localhost:8090>. The bar at the top is the `@` command line: type
+what you'd type after `@` in a terminal, such as `192.168.1.10:8080` or
+`api.internal --no-discovery --probe-rate-limit`, and press Enter. The CLI's
+options all work there except `--paths` and `--serve`; an empty line scans this
+computer. While it runs, the page shows the port the scan has
 reached, then the open ports and endpoints as they turn up; when it's done, the
 findings, ports and endpoints, each endpoint with the same verdict blocks as the
 CLI. The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,

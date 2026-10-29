@@ -28,6 +28,8 @@ export interface Progress {
 export interface ScanRow {
   id: string;
   target: string;
+  // The line it was started with, as typed in a terminal.
+  command: string;
   status: Status;
   created: number;
   finished: number | null;
