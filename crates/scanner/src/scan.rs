@@ -66,22 +66,9 @@ pub async fn scan_ports(
     concurrency: usize,
     per_port_timeout: Duration,
 ) -> Vec<OpenPort> {
-    scan_ports_with(ip, ports_to_scan, concurrency, per_port_timeout, &|_, _| {}).await
-}
-
-/// [`scan_ports`], calling `on_port` as each port's probe finishes, so a caller
-/// can show the scan's progress while it runs.
-pub async fn scan_ports_with(
-    ip: IpAddr,
-    ports_to_scan: &[u16],
-    concurrency: usize,
-    per_port_timeout: Duration,
-    on_port: &(dyn Fn(u16, PortState) + Sync),
-) -> Vec<OpenPort> {
     let results = stream::iter(ports_to_scan.iter().copied())
         .map(|port| async move {
             let state = probe(SocketAddr::new(ip, port), per_port_timeout).await;
-            on_port(port, state);
             (port, state)
         })
         .buffer_unordered(concurrency.max(1))
