@@ -118,6 +118,13 @@ mod tests {
     }
 
     #[test]
+    fn at_with_space() {
+        let t = Target::parse("@ 192.168.1.10:8080").unwrap();
+        assert_eq!(t.host, "192.168.1.10");
+        assert_eq!(t.port, Some(8080));
+    }
+
+    #[test]
     fn ipv4_with_port() {
         let t = Target::parse("@192.168.1.10:8080").unwrap();
         assert_eq!(t.host, "192.168.1.10");
