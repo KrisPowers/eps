@@ -7,6 +7,8 @@
 //!   in a terminal, `@ 192.168.1.10 --no-discovery`; the `@` may be left out
 //! - `GET /api/scans/{id}`: one scan with its full report, or its progress
 //! - `DELETE /api/scans/{id}`: forget a finished scan
+//! - `DELETE /api/scans`: forget every finished scan
+//! - `GET /health`: whether it's up, and its version
 //!
 //! There is no sign-in, so only requests addressed to this computer
 //! (`localhost`, `127.0.0.1`, `[::1]`) are answered; `PORTSCAN_HOSTS` adds
@@ -207,8 +209,11 @@ pub async fn run(addr: &str, web: Option<PathBuf>, data: Option<PathBuf>) -> any
     });
 
     let router = Router::new()
-        .route("/health", get(|| async { Json(json!({ "ok": true })) }))
-        .route("/api/scans", get(list).post(create))
+        .route(
+            "/health",
+            get(|| async { Json(json!({ "ok": true, "version": env!("CARGO_PKG_VERSION") })) }),
+        )
+        .route("/api/scans", get(list).post(create).delete(clear))
         .route("/api/scans/{id}", get(show).delete(remove))
         .fallback(static_file)
         .layer(middleware::from_fn_with_state(app.clone(), local_only))
@@ -323,6 +328,15 @@ async fn remove(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response
     scans.remove(i);
     app.save(&scans);
     Json(json!({ "ok": true })).into_response()
+}
+
+/// Forgets every finished scan; the ones still going are kept.
+async fn clear(State(app): State<Arc<App>>) -> Json<Value> {
+    let mut scans = app.scans.lock().await;
+    let before = scans.len();
+    scans.retain(|s| matches!(s.status, Status::Queued | Status::Running));
+    app.save(&scans);
+    Json(json!({ "removed": before - scans.len() }))
 }
 
 #[derive(Deserialize)]

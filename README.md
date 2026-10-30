@@ -48,8 +48,9 @@ line: type what you'd type after `@` in a terminal, such as `192.168.1.10:8080` 
 `api.internal --no-discovery --probe-rate-limit`, and press Enter. The CLI's
 options all work there except `--paths` and `--serve`; an empty line scans this
 computer. Focused, the bar lists your recent scans, narrowed to what you type.
-The `?` beside it opens the docs, and the gear opens Settings, where the theme
-is light, dark or the system's.
+The `?` beside it opens the docs, and the gear opens Settings: the theme, the
+options every new scan starts with, exporting every scan at once, and clearing
+the finished ones.
 
 Your scans are listed as cards. A scan opens on its **Findings**: a count per
 severity, then every open port, worst first. Each port opens its own page with

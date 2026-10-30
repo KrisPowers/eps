@@ -13,4 +13,7 @@ export const api = {
   // `command` is what you'd type in a terminal: `@ 10.0.0.5 --no-discovery`.
   start: (command: string) => call<ScanRow>("/api/scans", { method: "POST", body: JSON.stringify({ command }) }),
   remove: (id: string) => call<{ ok: boolean }>(`/api/scans/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  // Forgets every finished scan.
+  clear: () => call<{ removed: number }>("/api/scans", { method: "DELETE" }),
+  health: () => call<{ ok: boolean; version?: string }>("/health"),
 };
