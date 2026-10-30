@@ -210,19 +210,21 @@ b { font-weight: 500; }
 .stage-center { position: relative; width: min(440px, 100%); text-align: center; }
 .stage-label { font-size: 13px; font-weight: 500; color: var(--text-2); }
 
-/* The port being scanned rides the bar, over the point it has reached. */
-.sweep { position: relative; padding-top: 42px; }
+/* The port being scanned sits in a pill above the bar; each new number rises
+   in as the last one rises out. */
+.sweep { display: grid; justify-items: center; gap: 16px; }
 .sweep-pill {
-  position: absolute; top: 0; transform: translateX(-50%); display: inline-grid; place-items: center;
-  min-width: 64px; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--primary); color: #fff;
-  font: 500 13px var(--mono); font-variant-numeric: tabular-nums; box-shadow: 0 4px 14px rgba(29, 99, 237, .35);
-  transition: left .7s linear;
+  display: inline-grid; place-items: center; min-width: 88px; height: 32px; padding: 0 14px;
+  border-radius: 6px; background: var(--primary); color: #fff; font: 500 14px var(--mono);
+  font-variant-numeric: tabular-nums;
 }
-.sweep-pill::after {
-  content: ""; position: absolute; left: 50%; bottom: -4px; width: 8px; height: 8px; border-radius: 1px;
-  background: inherit; transform: translateX(-50%) rotate(45deg);
-}
-.sweep .bar { height: 6px; border-radius: 3px; }
+.ticker { display: inline-grid; height: 20px; line-height: 20px; overflow: hidden; }
+.ticker > span { grid-area: 1 / 1; text-align: center; }
+.ticker-now { animation: tick-in .28s var(--ease) both; }
+.ticker-was { animation: tick-out .28s var(--ease) both; }
+@keyframes tick-in { from { opacity: 0; transform: translateY(70%); } }
+@keyframes tick-out { to { opacity: 0; transform: translateY(-70%); } }
+.sweep .bar { width: 100%; height: 6px; border-radius: 3px; }
 
 .bar { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
 .bar > div { height: 100%; background: var(--primary); transition: width .7s linear; }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { Endpoint, Finding, Port, Posture, Progress, Report, ScanRow, Severity } from "./types";
 
@@ -90,10 +90,9 @@ function Facts({ scan, items, progress: p }: { scan: ScanRow; items: Item[] | nu
 }
 
 // Stage is the sweep: skeleton rows for the ports to come and, in the middle
-// of them, the loading bar with the port being scanned riding on it.
+// of them, the port being scanned in a pill above the loading bar.
 function Stage({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
   const sweep = p?.phase === "ports" ? p : undefined;
-  const port = useTween(sweep?.port ?? 0, 700);
   const pct = sweep?.ports_total ? (sweep.ports_done / sweep.ports_total) * 100 : 0;
   return (
     <section className="stage" aria-busy="true">
@@ -105,7 +104,7 @@ function Stage({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
       <div className="stage-center">
         {sweep ? (
           <div className="sweep" role="progressbar" aria-label="Ports scanned" aria-valuenow={Math.floor(pct)} aria-valuemin={0} aria-valuemax={100}>
-            <span className="sweep-pill" style={{ left: `clamp(32px, ${pct}%, calc(100% - 32px))` }}>{port || "…"}</span>
+            <span className="sweep-pill"><Ticker value={String(sweep.port || "…")} /></span>
             <div className="bar"><div style={{ width: pct + "%" }} /></div>
           </div>
         ) : (
@@ -311,23 +310,15 @@ function path(location: string) {
   return url.startsWith("http") ? new URL(url).pathname : "";
 }
 
-// useTween eases a number to each new value over `ms`, so the port the
-// sweep has reached ticks through every number on the way.
-function useTween(to: number, ms: number) {
-  const [shown, setShown] = useState(to);
-  const from = useRef(to);
-  useEffect(() => {
-    const start = performance.now();
-    const a = from.current;
-    let raf = 0;
-    const tick = (t: number) => {
-      const k = Math.min(1, (t - start) / ms);
-      from.current = Math.round(a + (to - a) * k);
-      setShown(from.current);
-      if (k < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [to, ms]);
-  return shown;
+// Ticker shows a value that, when it changes, rises and fades out while the
+// new one rises in from below.
+function Ticker({ value }: { value: string }) {
+  const [shown, setShown] = useState({ now: value, was: "" });
+  if (shown.now !== value) setShown({ now: value, was: shown.now });
+  return (
+    <span className="ticker">
+      {shown.was && <span key={"was" + shown.was} className="ticker-was" aria-hidden="true">{shown.was}</span>}
+      <span key={shown.now} className="ticker-now">{shown.now}</span>
+    </span>
+  );
 }
