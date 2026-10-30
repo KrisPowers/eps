@@ -271,7 +271,8 @@ fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
     bottom.finish(out);
 }
 
-/// Open ports, with risky services highlighted and the reason beside.
+/// Open ports, with risky services highlighted and the reason beside, and
+/// otherwise what the service said first, when it said anything.
 fn port_section(paint: Paint, report: &Report, out: &mut String) {
     heading(paint, "PORTS", "", out);
     if report.open_ports.is_empty() {
@@ -291,6 +292,10 @@ fn port_section(paint: Paint, report: &Report, out: &mut String) {
             }
             None => {
                 row.add("", &p.service);
+                if let Some(banner) = &p.banner {
+                    row.pad_to(28);
+                    row.add(ACCENT, &fit(banner, WIDTH - 28));
+                }
             }
         }
         row.finish(out);

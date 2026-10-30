@@ -108,7 +108,7 @@ function Results({ id, items }: { id: string; items: Item[] }) {
           <li key={item.port}>
             <a className={"result " + item.state} href={href(id, item.port)}>
               <span className="port-num">{item.port}<small>/tcp</small></span>
-              <span className="result-service">{item.service}</span>
+              <span className="result-service">{item.service}{item.banner && <small className="mono">{item.banner}</small>}</span>
               <span className="result-what">
                 {item.state === "waiting" && "Waiting"}
                 {item.state === "checking" && <><span className="spinner small" />Checking endpoints</>}
@@ -245,6 +245,7 @@ function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) 
           <h1 className="port-num">{item.port}<small>/tcp</small></h1>
           <div className="page-sub">
             <span>{item.service}</span>
+            {item.banner && <code className="command-line">{item.banner}</code>}
             {f && <Counts findings={f.findings} />}
           </div>
         </div>

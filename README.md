@@ -11,6 +11,8 @@ command:
 - **Endpoints** - for HTTP(S) services it discovers conventional,
   framework-published paths (health probes, metrics, API docs, management
   consoles, and classic over-exposure sources like `/actuator/env` or `/.git/HEAD`).
+- **Greetings** - what each service says first on connect, such as SSH's or
+  MySQL's version line. It only listens; nothing is sent.
 - **Posture** - for each endpoint it checks whether it is reachable **without
   authentication**, served over **TLS**, and whether **rate limiting / throttling**
   is advertised or enforced.

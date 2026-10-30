@@ -37,6 +37,8 @@ pub struct Progress {
     inspecting: AtomicUsize,
     /// Each port that is done, with its endpoints and findings.
     found: Mutex<HashMap<u16, Value>>,
+    /// What each service that spoke first said.
+    banners: Mutex<HashMap<u16, String>>,
 }
 
 impl Progress {
@@ -72,6 +74,11 @@ impl Progress {
         self.inspecting.store(0, Ordering::Relaxed);
     }
 
+    pub fn banner(&self, port: u16, text: &str) {
+        let mut banners = self.banners.lock().unwrap_or_else(|e| e.into_inner());
+        banners.insert(port, text.to_string());
+    }
+
     /// What one open port exposes, once nothing more is coming for it.
     pub fn checked(&self, port: u16, what: Value) {
         let mut found = self.found.lock().unwrap_or_else(|e| e.into_inner());
@@ -82,11 +89,12 @@ impl Progress {
         let mut open = self.open.lock().unwrap_or_else(|e| e.into_inner()).clone();
         open.sort_unstable();
         let found = self.found.lock().unwrap_or_else(|e| e.into_inner());
+        let banners = self.banners.lock().unwrap_or_else(|e| e.into_inner());
         let open: Vec<Value> = open
             .iter()
             .map(|p| {
                 let service = scanner::ports::service_name(*p);
-                json!({ "port": p, "service": service, "found": found.get(p) })
+                json!({ "port": p, "service": service, "banner": banners.get(p), "found": found.get(p) })
             })
             .collect();
         let inspecting = self.inspecting.load(Ordering::Relaxed);
