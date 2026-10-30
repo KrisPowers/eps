@@ -73,7 +73,15 @@ pub struct DnsView {
 /// flagging about its mail: no SPF or DMARC for a domain that takes mail,
 /// SPF letting anyone send, DMARC that only monitors.
 pub fn add_dns(report: &mut Report, host: &str, records: &[Record]) {
-    report.dns = records
+    let (views, findings) = dns_report(host, records);
+    report.dns = views;
+    report.findings.extend(findings);
+    report.findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
+}
+
+/// `host`'s DNS records as the report shows them, and their findings.
+pub fn dns_report(host: &str, records: &[Record]) -> (Vec<DnsView>, Vec<Finding>) {
+    let views = records
         .iter()
         .map(|r| DnsView {
             name: r.name.clone(),
@@ -82,8 +90,7 @@ pub fn add_dns(report: &mut Report, host: &str, records: &[Record]) {
             ttl: r.ttl,
         })
         .collect();
-    report.findings.extend(dns_findings(host, records));
-    report.findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
+    (views, dns_findings(host, records))
 }
 
 /// The TXT records at `name`.

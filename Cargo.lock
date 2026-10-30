@@ -245,6 +245,7 @@ dependencies = [
  "axum",
  "clap",
  "endpoints",
+ "futures",
  "report",
  "scanner",
  "serde",
