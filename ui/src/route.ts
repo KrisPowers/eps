@@ -1,16 +1,17 @@
 // Where the page is, kept in the URL hash: `#/` the scans, `#/docs` the
-// docs, `#/<id>` a scan's findings, `#/<id>/<port>` one port of it.
+// docs, `#/settings` the settings, `#/<id>` a scan's findings, `#/<id>/<port>`
+// one port of it.
 
 export interface Route {
   id: string;
-  docs: boolean;
+  view: "scans" | "docs" | "settings" | "scan";
   port: number | null;
 }
 
 export function readHash(): Route {
   const [first = "", port = ""] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
-  if (first === "docs") return { id: "", docs: true, port: null };
-  return { id: first, docs: false, port: Number(port) || null };
+  if (first === "docs" || first === "settings") return { id: "", view: first, port: null };
+  return { id: first, view: first ? "scan" : "scans", port: Number(port) || null };
 }
 
 export function href(id: string, port?: number | null) {

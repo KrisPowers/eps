@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
 import { api } from "./api";
 import { Docs } from "./Docs";
+import { Settings } from "./Settings";
 import { Icon, type IconName } from "./Icon";
 import { go, href, readHash } from "./route";
 import { Card, results, ScanView, SEVERITY } from "./ScanView";
@@ -12,7 +13,7 @@ export function App() {
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [route, setRoute] = useState(readHash);
-  const { id, docs, port } = route;
+  const { id, view, port } = route;
   const [problem, setProblem] = useState("");
   const [toast, setToast] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -99,8 +100,8 @@ export function App() {
         <a className="brand" href="#/"><Icon name="lan" size={24} /><span>portscan</span></a>
         <ScanBar scans={scans} onScan={start} />
         <div className="header-actions">
-          <a className={"icon-btn" + (docs ? " on" : "")} href="#/docs" aria-label="Help" title="Help"><Icon name="help" /></a>
-          <ThemeMenu />
+          <a className={"icon-btn" + (view === "docs" ? " on" : "")} href="#/docs" aria-label="Help" title="Help"><Icon name="help" /></a>
+          <a className={"icon-btn" + (view === "settings" ? " on" : "")} href="#/settings" aria-label="Settings" title="Settings"><Icon name="settings" /></a>
         </div>
       </header>
 
@@ -109,26 +110,23 @@ export function App() {
           {id ? (
             <>
               <a className="nav-back" href="#/"><Icon name="arrow_back" /><span>All scans</span></a>
-              {selected && (
-                <div className="nav-group">
-                  <div className="nav-head" title={selected.target}><Mark scan={selected} /><span>{selected.target}</span></div>
-                  <NavItem to={href(selected.id)} icon="shield" label="Findings" on />
-                </div>
-              )}
+              <hr className="nav-rule" />
+              {selected && <NavItem to={href(selected.id)} icon="shield" label="Findings" on />}
             </>
           ) : (
-            <NavItem to="#/" icon="history" label="Scans" on={!docs} />
+            <NavItem to="#/" icon="history" label="Scans" on={view === "scans"} />
           )}
         </nav>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
-        <main className="page" key={docs ? "docs" : id + "/" + (port ?? "")}>
-          {docs && <Docs />}
-          {!docs && selected && (
+        <main className="page" key={view + id + "/" + (port ?? "")}>
+          {view === "docs" && <Docs />}
+          {view === "settings" && <Settings />}
+          {view === "scan" && selected && (
             <ScanView scan={selected} items={items} progress={progress} port={port}
               onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
           )}
-          {!docs && !id && <Home scans={scans} problem={problem} onScan={start} />}
+          {view === "scans" && <Home scans={scans} problem={problem} onScan={start} />}
         </main>
       </div>
 
@@ -204,76 +202,6 @@ function Severities({ counts }: { counts: Record<Severity, number> }) {
     <span className="chips">
       {shown.map((s) => <span key={s} className={"chip " + SEVERITY[s]}>{counts[s]} {s}</span>)}
     </span>
-  );
-}
-
-type Theme = "system" | "light" | "dark";
-const THEMES: [Theme, string, IconName][] = [["system", "System", "brightness_auto"], ["light", "Light", "light_mode"], ["dark", "Dark", "dark_mode"]];
-
-// ThemeMenu picks light, dark, or whatever the system is set to. The choice
-// is kept in this browser; index.html applies it before the page draws.
-function ThemeMenu() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      const t = localStorage.getItem("theme");
-      return t === "light" || t === "dark" ? t : "system";
-    } catch {
-      return "system";
-    }
-  });
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "system") delete root.dataset.theme;
-    else root.dataset.theme = theme;
-    try {
-      if (theme === "system") localStorage.removeItem("theme");
-      else localStorage.setItem("theme", theme);
-    } catch {
-      // Not kept, still applied.
-    }
-  }, [theme]);
-
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
-
-  const [, , icon] = THEMES.find(([key]) => key === theme)!;
-  return (
-    <div className="menu-wrap" ref={box}>
-      <button type="button" className="icon-btn" aria-label="Theme" title="Theme" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Icon name={icon} />
-      </button>
-      {open && (
-        <div className="menu" role="menu" aria-label="Theme">
-          {THEMES.map(([key, label, ic]) => (
-            <button key={key} type="button" role="menuitemradio" aria-checked={theme === key} className="menu-item"
-              onClick={() => {
-                setTheme(key);
-                setOpen(false);
-              }}>
-              <Icon name={ic} />
-              <span>{label}</span>
-              {theme === key && <Icon name="check" size={18} className="menu-check" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
