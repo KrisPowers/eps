@@ -16,6 +16,9 @@ command:
   or 1.1, found with a ClientHello offering only that version.
 - **Headers** - for each endpoint, its security headers (HSTS, CSP, framing
   protection, `nosniff`, CORS) and the flags on any cookie it sets.
+- **Technologies** - the software recognized on each port (web server,
+  language, framework, database, SSH and mail servers, with versions where
+  shown), from headers, cookie names, product-specific paths and greetings.
 - **Greetings** - what each service says first on connect, such as SSH's or
   MySQL's version line. It only listens; nothing is sent.
 - **Posture** - for each endpoint it checks whether it is reachable **without

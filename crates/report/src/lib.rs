@@ -13,8 +13,10 @@ use scanner::scan::OpenPort;
 use serde::Serialize;
 
 mod render;
+mod tech;
 
 pub use render::{render_human, Posture};
+pub use tech::{technologies, Tech};
 
 /// Impact tier for a finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -46,6 +48,9 @@ pub struct Report {
     /// For a range, each host that answered, with its open ports.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hosts: Vec<HostView>,
+    /// The software recognized on the open ports; see [`technologies`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub technologies: Vec<Tech>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -482,6 +487,7 @@ pub fn assemble(
         endpoints,
         findings,
         hosts: Vec::new(),
+        technologies: Vec::new(),
     }
 }
 
@@ -518,6 +524,7 @@ pub fn assemble_range(target: &str, hosts: &[(IpAddr, Vec<OpenPort>)]) -> Report
         endpoints: Vec::new(),
         findings,
         hosts: views,
+        technologies: Vec::new(),
     }
 }
 
@@ -536,6 +543,7 @@ mod tests {
             sensitive,
             note: "n".to_string(),
             server: None,
+            powered_by: None,
             content_type: None,
             www_authenticate: None,
             location: None,

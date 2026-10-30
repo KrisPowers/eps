@@ -93,6 +93,18 @@ export interface Report {
   findings: Finding[];
   // For a range, each host that answered.
   hosts?: Host[];
+  // The software recognized on the open ports.
+  technologies?: Tech[];
+}
+
+export interface Tech {
+  port: number;
+  name: string;
+  version?: string;
+  // Web server, language, framework, ...
+  kind: string;
+  // What gave it away.
+  evidence: string;
 }
 
 export interface Host {

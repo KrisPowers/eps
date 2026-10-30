@@ -1,5 +1,5 @@
 //! Terminal rendering of a report: a summary card up top, the open ports,
-//! each HTTPS service's certificate, then one card per endpoint with a color-coded verdict for each security
+//! the software recognized on them, each HTTPS service's certificate, then one card per endpoint with a color-coded verdict for each security
 //! control.
 
 use std::io::IsTerminal;
@@ -430,6 +430,28 @@ fn date(secs: i64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
+/// The software recognized on each port, with what gave it away.
+fn tech_section(paint: Paint, report: &Report, out: &mut String) {
+    if report.technologies.is_empty() {
+        return;
+    }
+    heading(paint, "TECHNOLOGIES", "", out);
+    for t in &report.technologies {
+        let mut row = Row::new(paint);
+        row.add("1", &t.port.to_string());
+        row.add("", "/tcp");
+        row.pad_to(11);
+        let name = match &t.version {
+            Some(v) => format!("{} {v}", t.name),
+            None => t.name.clone(),
+        };
+        row.add("", &fit(&name, 30));
+        row.pad_to(43);
+        row.add(ACCENT, &fit(&format!("{}, {}", t.kind, t.evidence), WIDTH - 43));
+        row.finish(out);
+    }
+}
+
 /// Each HTTPS service's certificate, and any old TLS versions it accepts.
 fn tls_section(paint: Paint, report: &Report, out: &mut String) {
     for p in &report.open_ports {
@@ -527,6 +549,7 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
     if port.is_none() {
         port_section(paint, report, &mut out);
     }
+    tech_section(paint, report, &mut out);
     tls_section(paint, report, &mut out);
 
     let served: Vec<&ServiceReport> = services

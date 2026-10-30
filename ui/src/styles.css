@@ -302,6 +302,8 @@ a.result:hover { background: var(--hover); }
 .result-what { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
 .result-meta { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap; }
 .result-go { color: var(--text-3); }
+.result.tech-row { grid-template-columns: minmax(0, 1fr) 120px minmax(0, 220px) 24px; }
+.tech-name { display: flex; align-items: center; gap: 10px; min-width: 0; font-weight: 500; }
 .result.history-row { grid-template-columns: 200px 110px 110px minmax(0, 1fr) 24px; }
 .result.history-row .result-meta { text-align: left; }
 .result.on { background: var(--accent-bg); color: var(--on-accent-bg); }
