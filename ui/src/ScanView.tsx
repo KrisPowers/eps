@@ -42,8 +42,6 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
 }) {
   const range = isRange(scan);
   const open = items?.find((i) => i.port === port);
-  if (open && items) return <Detail key={open.port} id={scan.id} item={open} items={sorted(items)} />;
-
   const going = scan.status === "queued" || scan.status === "running";
   const ip = scan.resolved_ip ?? p?.ip;
   return (
@@ -70,7 +68,10 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
       {scan.status === "failed" && (
         <div className="callout bad"><Icon name="error" /><span>{scan.error ?? "The scan failed."}</span></div>
       )}
-      {page === "changes"
+      {/* The heading above stays put; only what's under it changes from page to page. */}
+      <div className="page-body" key={page + "/" + (port ?? "")}>
+      {open && items ? <Detail id={scan.id} item={open} items={sorted(items)} />
+        : page === "changes"
         ? <Changes scan={scan} report={report} previous={previous} />
         : page === "history" ? <History scan={scan} history={history} />
         : page === "tech" ? <Later scan={scan} ready={report}>{(r) => <Technologies id={scan.id} report={r} />}</Later>
@@ -79,6 +80,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
+      </div>
     </>
   );
 }
@@ -484,10 +486,10 @@ function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) 
   const f = item.found;
   return (
     <>
-      <div className="page-head">
+      <div className="sub-head">
         <a className="icon-btn" href={href(id)} aria-label="Back to findings" title="Back to findings"><Icon name="arrow_back" /></a>
         <div className="page-head-main">
-          <h1 className="port-num">{item.port}<small>/tcp</small></h1>
+          <h2 className="port-num">{item.port}<small>/tcp</small></h2>
           <div className="page-sub">
             <span>{item.service}</span>
             {item.banner && <code className="command-line">{item.banner}</code>}

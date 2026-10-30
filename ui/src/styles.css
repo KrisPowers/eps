@@ -125,7 +125,7 @@ kbd {
 .nav-rule { height: 1px; margin: 8px 16px; border: 0; background: var(--line); }
 .scrim { display: none; }
 
-.page { min-width: 0; width: 100%; max-width: 1280px; margin: 0 auto; padding: 16px 32px 56px; animation: rise .3s var(--ease) both; }
+.page { min-width: 0; width: 100%; max-width: 1280px; margin: 0 auto; padding: 16px 32px 56px; }
 
 /* The page's heading: its title, a line of facts under it, its actions on
    the right, and a rule below. */
@@ -134,6 +134,12 @@ kbd {
   padding-bottom: 16px; margin-bottom: 24px; border-bottom: 1px solid var(--line);
 }
 .page-head-main { flex: 1; min-width: 0; display: grid; gap: 6px; }
+/* What changes from page to page, under a heading that stays put. */
+.page-body { animation: rise .25s var(--ease) both; }
+/* A page within a page, such as one port: back, its name, a step either side. */
+.sub-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 20px; }
+.sub-head h2 { font-size: 22px; font-weight: 400; }
+.doc-title { margin-bottom: 4px; font-size: 20px; font-weight: 400; }
 .page-head h1 { min-width: 0; font-size: 24px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--text-2); }
 .page-sub b { color: var(--text); }
@@ -208,8 +214,6 @@ kbd {
 
 /* ---- cards ---- */
 .card { border-radius: var(--card-round); background: var(--card); overflow: hidden; animation: rise .3s var(--ease) both; }
-/* A card holding a dropdown lets its list hang out past the edge. */
-.card:has(.menu-wrap) { overflow: visible; }
 .card-head { display: flex; align-items: flex-start; gap: 16px; padding: 20px 24px 16px; }
 .card-titles { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .card-head h2 { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 20px; font-weight: 400; }
@@ -410,18 +414,41 @@ a.result:hover { background: var(--hover); }
 .setting-title { font-weight: 500; }
 .setting-sub { margin-top: 2px; font-size: 13px; color: var(--text-2); }
 
-/* A dropdown: a field showing the choice, opening a list under it. */
-.select {
-  display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 160px; height: 40px; padding: 0 10px 0 14px;
-  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--bg); color: var(--text); font: inherit; cursor: pointer;
+/* A dropdown: a tonal field showing the choice, its caret turning as the
+   list opens over the page beneath it. */
+.dropdown {
+  display: inline-flex; align-items: center; gap: 10px; min-width: 180px; height: 40px; padding: 0 10px 0 16px;
+  border: 0; border-radius: 999px; background: var(--card-2); color: var(--text); font: 500 14px var(--font); cursor: pointer;
+  transition: background .15s, box-shadow .15s;
 }
-.select:hover { border-color: var(--text-2); }
-.select[aria-expanded="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.select-caret { color: var(--text-2); transform: rotate(90deg); transition: transform .15s; }
-.select[aria-expanded="true"] .select-caret { transform: rotate(-90deg); }
-ul.menu { margin: 0; list-style: none; }
-.menu-item[aria-selected="true"] { color: var(--accent); }
-.menu-item .menu-check { margin-left: auto; color: var(--accent); }
+.dropdown:hover { background: color-mix(in srgb, var(--card-2) 80%, var(--text)); }
+.dropdown.open { background: var(--accent-bg); color: var(--on-accent-bg); box-shadow: inset 0 0 0 2px var(--accent); }
+.dropdown .icon { color: inherit; }
+.dropdown-value { flex: 1; text-align: left; }
+.dropdown-caret { flex-shrink: 0; fill: currentColor; transition: transform .2s var(--ease); }
+.dropdown.open .dropdown-caret { transform: rotate(180deg); }
+.dropdown-list {
+  position: fixed; z-index: 100; margin: 0; padding: 8px; list-style: none; max-height: 360px; overflow-y: auto;
+  background: var(--raised); border-radius: 16px; box-shadow: var(--shadow);
+  transform-origin: top; animation: drop .16s var(--ease) both;
+}
+.dropdown-list.up { transform-origin: bottom; }
+.dropdown-option {
+  display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 14px 6px 8px; border-radius: 10px;
+  color: var(--text); cursor: pointer;
+}
+.dropdown-option.active { background: var(--hover); }
+.dropdown-option[aria-selected="true"] { background: var(--accent-bg); color: var(--on-accent-bg); }
+.dropdown-check { display: grid; place-items: center; width: 20px; flex-shrink: 0; }
+.dropdown-icon { color: var(--text-2); }
+.dropdown-option[aria-selected="true"] .dropdown-icon { color: inherit; }
+.dropdown-text { display: grid; gap: 1px; }
+.dropdown-text small { font-size: 12px; color: var(--text-2); }
+.dropdown-option[aria-selected="true"] .dropdown-text small { color: inherit; opacity: .8; }
+
+/* What new scans get, as it would be typed. */
+.preview { padding: 0 24px 24px; }
+.preview code { display: block; padding: 12px 16px; border-radius: 12px; background: var(--bg); color: var(--text-2); }
 
 /* An on and off switch. */
 .switch {
@@ -440,6 +467,8 @@ ul.menu { margin: 0; list-style: none; }
 .btn.danger.armed { border-color: var(--bad); background: var(--bad); color: var(--on-bad); }
 
 /* ---- docs ---- */
+.bullets { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--text-2); }
+.doc h3 { font-size: 16px; font-weight: 500; }
 .docs { max-width: 860px; display: grid; gap: 16px; }
 .doc { display: grid; gap: 12px; padding: 20px 24px; }
 .doc h2 { font-size: 20px; font-weight: 400; }
@@ -482,6 +511,17 @@ ul.menu { margin: 0; list-style: none; }
   .result-meta { display: none; }
   .result-go { grid-column: 3; grid-row: 1 / 3; }
   .examples li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+/* Compact density, picked in Settings. */
+:root[data-density="compact"] .result { min-height: 44px; }
+:root[data-density="compact"] .table td { height: 38px; }
+:root[data-density="compact"] .setting { min-height: 52px; padding-top: 8px; padding-bottom: 8px; }
+:root[data-density="compact"] .finding { padding-top: 8px; padding-bottom: 8px; }
+:root[data-density="compact"] .stack { gap: 12px; }
+
+/* Reduced motion, from the system or picked in Settings. */
+:root[data-motion="reduce"] *, :root[data-motion="reduce"] *::before, :root[data-motion="reduce"] *::after {
+  animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important;
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
