@@ -1,38 +1,48 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Icon } from "./Icon";
+import { href, type Page } from "./route";
 import type { Endpoint, Finding, Port, Posture, Progress, Report, ScanRow, Severity } from "./types";
 
 // A port as the page draws it: waiting its turn, being checked, or done with
 // what it turned out to expose.
-type Item = Port & { state: "waiting" | "checking" | "done" };
+export type Item = Port & { state: "waiting" | "checking" | "done" };
 
-// ScanView is one scan: the sweep while it runs, then a catalog of the open
-// ports, each opening a page of its own. A port can be opened as soon as it
-// is done, while the rest are still being checked.
-export function ScanView({ scan, report, port, onPort, onAgain, onDelete }: {
+// results is a scan's open ports: from its report once it has one, from its
+// progress once the sweep is over, none before.
+export function results(scan: ScanRow, report: Report | undefined, p: Progress | undefined): Item[] | null {
+  if (report) return fromReport(report);
+  if (p && (p.phase === "endpoints" || p.phase === "done")) return fromProgress(p);
+  return null;
+}
+
+// ScanView is one page of a scan: the sweep while it runs, then the open
+// ports as a catalog, each with a page of its own, or every endpoint or
+// finding on one page. A port can be opened as soon as it is done, while the
+// rest are still being checked.
+export function ScanView({ scan, items, progress: p, page, port, onAgain, onDelete }: {
   scan: ScanRow;
-  report?: Report;
+  items: Item[] | null;
+  progress?: Progress;
+  page: Page;
   port: number | null;
-  onPort: (port: number | null) => void;
   onAgain: () => void;
   onDelete: () => void;
 }) {
   const going = scan.status === "queued" || scan.status === "running";
-  // The last progress seen keeps the ports on screen between the scan
-  // finishing and its report arriving.
-  const last = useRef(scan.progress);
-  if (scan.progress) last.current = scan.progress;
-  const p = scan.progress ?? last.current;
-  const swept = p?.phase === "endpoints" || p?.phase === "done";
-  const items = report ? fromReport(report) : p && swept ? fromProgress(p) : null;
+  const ip = scan.resolved_ip ?? p?.ip;
   const open = items?.find((i) => i.port === port);
-  const ip = report?.resolved_ip ?? p?.ip ?? scan.resolved_ip;
+  const found = items?.flatMap((i) => (i.found ? [i.found] : [])) ?? [];
 
   let body = null;
-  if (open && items) body = <PortPage key={open.port} item={open} items={items} onPort={onPort} />;
-  else if (items) body = <Catalog items={items} onPort={onPort} />;
-  else if (going) body = <Stage scan={scan} progress={p} />;
-  else if (scan.status === "done") body = <Loading />;
+  if (!items) body = going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null;
+  else if (page === "ports") body = open ? <PortPage key={open.port} id={scan.id} item={open} items={items} /> : <Catalog id={scan.id} items={items} />;
+  else if (page === "endpoints") {
+    const all = found.flatMap((f) => f.endpoints);
+    body = all.length ? <div className="panel"><EndpointsTable id={scan.id} endpoints={all} /></div> : <Nothing going={going} what="No HTTP endpoints found" />;
+  } else {
+    const all = found.flatMap((f) => f.findings).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+    body = all.length ? <div className="panel"><ul className="findings">{all.map((x, k) => <FindingRow key={k} id={scan.id} finding={x} />)}</ul></div> : <Nothing going={going} what="No findings" />;
+  }
 
   return (
     <>
@@ -46,7 +56,7 @@ export function ScanView({ scan, report, port, onPort, onAgain, onDelete }: {
           <Facts scan={scan} items={items} progress={going ? p : undefined} />
         </div>
         <div className="page-actions">
-          <button type="button" className="btn secondary" disabled={going} onClick={onAgain}>
+          <button type="button" className="btn" disabled={going} onClick={onAgain}>
             <Icon name="refresh" size={18} /><span>Scan again</span>
           </button>
           <button type="button" className="icon-btn danger" aria-label="Delete scan" title="Delete scan" disabled={going} onClick={onDelete}>
@@ -116,15 +126,15 @@ function Stage({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
 
 // Catalog is every open port as a tile: what it is, the worst thing on it,
 // and how much it holds. A tile opens the port's page.
-function Catalog({ items, onPort }: { items: Item[]; onPort: (port: number) => void }) {
-  if (items.length === 0) return <div className="empty">No open ports found</div>;
+function Catalog({ id, items }: { id: string; items: Item[] }) {
+  if (items.length === 0) return <div className="panel"><div className="empty">No open ports found</div></div>;
   return (
     <div className="catalog">
       {items.map((item) => {
         const f = item.found;
         const worst = f?.findings.find((x) => x.severity !== "info");
         return (
-          <button key={item.port} type="button" className={"tile " + item.state} onClick={() => onPort(item.port)}>
+          <a key={item.port} className={"tile " + item.state} href={href(id, "ports", item.port)}>
             <span className="tile-top">
               <span className="port-num">{item.port}<small>/tcp</small></span>
               {item.state === "checking" && <span className="spinner small" aria-label="Checking" />}
@@ -136,7 +146,7 @@ function Catalog({ items, onPort }: { items: Item[]; onPort: (port: number) => v
               {item.state === "checking" && "Checking endpoints"}
               {f && <>{plural(f.findings.length, "finding")} · {plural(f.endpoints.length, "endpoint")}</>}
             </span>
-          </button>
+          </a>
         );
       })}
     </div>
@@ -145,7 +155,7 @@ function Catalog({ items, onPort }: { items: Item[]; onPort: (port: number) => v
 
 // PortPage is one port: back to the catalog, a step to the ports either
 // side, and what it holds, findings and endpoints each on a tab.
-function PortPage({ item, items, onPort }: { item: Item; items: Item[]; onPort: (port: number | null) => void }) {
+function PortPage({ id, item, items }: { id: string; item: Item; items: Item[] }) {
   const i = items.indexOf(item);
   const prev = items[i - 1];
   const next = items[i + 1];
@@ -154,21 +164,17 @@ function PortPage({ item, items, onPort }: { item: Item; items: Item[]; onPort: 
   return (
     <section className="port-page">
       <div className="port-page-head">
-        <button type="button" className="btn back" onClick={() => onPort(null)}>
+        <a className="btn back" href={href(id)}>
           <Icon name="arrow_back" size={18} /><span>All ports</span>
-        </button>
+        </a>
         <h2 className="port-title">
           <span className="port-num">{item.port}<small>/tcp</small></span>
           <span className="muted">{item.service}</span>
         </h2>
         <div className="pager">
-          <button type="button" className="icon-btn" aria-label="Previous port" disabled={!prev} onClick={() => prev && onPort(prev.port)}>
-            <Icon name="chevron_left" />
-          </button>
+          <Step id={id} to={prev} label="Previous port" icon="chevron_left" />
           <span className="pager-pos">{i + 1} of {items.length}</span>
-          <button type="button" className="icon-btn" aria-label="Next port" disabled={!next} onClick={() => next && onPort(next.port)}>
-            <Icon name="chevron_right" />
-          </button>
+          <Step id={id} to={next} label="Next port" icon="chevron_right" />
         </div>
       </div>
 
@@ -179,7 +185,7 @@ function PortPage({ item, items, onPort }: { item: Item; items: Item[]; onPort: 
         </div>
       )}
       {f && (
-        <>
+        <div className="panel">
           <div className="tabs" role="tablist">
             {([["findings", "Findings", f.findings.length], ["endpoints", "Endpoints", f.endpoints.length]] as const).map(([key, label, n]) => (
               <button key={key} type="button" role="tab" aria-selected={tab === key} className="tab" onClick={() => setTab(key)}>
@@ -187,7 +193,7 @@ function PortPage({ item, items, onPort }: { item: Item; items: Item[]; onPort: 
               </button>
             ))}
           </div>
-          <div className="panel" role="tabpanel">
+          <div role="tabpanel">
             {tab === "findings" && (f.findings.length
               ? <ul className="findings">{f.findings.map((x, k) => <FindingRow key={k} finding={x} />)}</ul>
               : <div className="empty">No findings on this port</div>)}
@@ -195,14 +201,22 @@ function PortPage({ item, items, onPort }: { item: Item; items: Item[]; onPort: 
               ? <EndpointsTable endpoints={f.endpoints} />
               : <div className="empty">No HTTP endpoints on this port</div>)}
           </div>
-        </>
+        </div>
       )}
     </section>
   );
 }
 
-function FindingRow({ finding: f }: { finding: Finding }) {
+function Step({ id, to, label, icon }: { id: string; to?: Item; label: string; icon: "chevron_left" | "chevron_right" }) {
+  if (!to) return <span className="icon-btn" aria-disabled="true"><Icon name={icon} /></span>;
+  return <a className="icon-btn" href={href(id, "ports", to.port)} aria-label={label} title={label}><Icon name={icon} /></a>;
+}
+
+// FindingRow is one finding. Given the scan's id, it is on a page of every
+// finding and links the port it was found on.
+function FindingRow({ id, finding: f }: { id?: string; finding: Finding }) {
   const where = path(f.location);
+  const port = portIn(f.location);
   return (
     <li className="finding">
       <span className={"chip " + SEVERITY[f.severity]}>{f.severity}</span>
@@ -210,12 +224,16 @@ function FindingRow({ finding: f }: { finding: Finding }) {
         <div className="finding-title">{f.title}</div>
         <div className="fix">{f.detail}</div>
       </div>
-      {where && <code className="finding-where">{where}</code>}
+      <span className="finding-where">
+        {id && port > 0 && <a className="port-link mono" href={href(id, "ports", port)}>{port}</a>}
+        {where && <code>{where}</code>}
+      </span>
     </li>
   );
 }
 
-const SEVERITY: Record<Severity, string> = { high: "bad", medium: "warn", low: "plain", info: "ok" };
+export const SEVERITY: Record<Severity, string> = { high: "bad", medium: "warn", low: "plain", info: "ok" };
+const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2, info: 3 };
 const POSTURE: Record<Posture, string> = {
   configured: "Configured",
   insecure: "Bypassable",
@@ -224,7 +242,9 @@ const POSTURE: Record<Posture, string> = {
 };
 const CONTROLS = [["auth", "AUTH"], ["jwt", "JWT"], ["rate", "RATE"], ["https", "HTTPS"]] as const;
 
-function EndpointsTable({ endpoints }: { endpoints: Endpoint[] }) {
+// EndpointsTable lists endpoints with a block per control. Given the scan's
+// id, it holds endpoints from every port and links each one's port.
+function EndpointsTable({ id, endpoints }: { id?: string; endpoints: Endpoint[] }) {
   return (
     <>
       <div className="legend">
@@ -234,11 +254,12 @@ function EndpointsTable({ endpoints }: { endpoints: Endpoint[] }) {
       </div>
       <div className="table-wrap">
         <table className="table">
-          <thead><tr><th>Status</th><th>Path</th><th>Controls</th><th className="grow">Note</th></tr></thead>
+          <thead><tr><th>Status</th>{id && <th>Port</th>}<th>Path</th><th>Controls</th><th className="grow">Note</th></tr></thead>
           <tbody>
             {endpoints.map((e) => (
               <tr key={e.url}>
                 <td className={"mono status-" + Math.floor(e.status / 100)}>{e.status}</td>
+                {id && <td><a className="port-link mono" href={href(id, "ports", portOf(e.url))}>{portOf(e.url)}</a></td>}
                 <td className="mono">{new URL(e.url).pathname}</td>
                 <td>
                   <span className="controls">
@@ -254,6 +275,15 @@ function EndpointsTable({ endpoints }: { endpoints: Endpoint[] }) {
         </table>
       </div>
     </>
+  );
+}
+
+// Nothing is an empty page: still filling while the scan runs, else empty.
+function Nothing({ going, what }: { going: boolean; what: string }) {
+  return (
+    <div className="panel">
+      {going ? <><div className="panel-note">Checking endpoints</div><SkeletonRows rows={4} /></> : <div className="empty">{what}</div>}
+    </div>
   );
 }
 
@@ -292,7 +322,7 @@ function fromReport(r: Report): Item[] {
     state: "done",
     found: {
       endpoints: r.endpoints.filter((e) => portOf(e.url) === o.port),
-      findings: r.findings.filter((f) => Number(/(?:^|\()port (\d+)/.exec(f.location)?.[1]) === o.port),
+      findings: r.findings.filter((f) => portIn(f.location) === o.port),
     },
   }));
 }
@@ -300,6 +330,12 @@ function fromReport(r: Report): Item[] {
 function portOf(url: string) {
   const u = new URL(url);
   return Number(u.port || (u.protocol === "https:" ? 443 : 80));
+}
+
+// portIn is the port a finding's location names, `port 22` or
+// `<url> (port 8080)`, 0 for none.
+function portIn(location: string) {
+  return Number(/(?:^|\()port (\d+)/.exec(location)?.[1] ?? 0);
 }
 
 // path is the part of a finding's location worth showing inside its port:
