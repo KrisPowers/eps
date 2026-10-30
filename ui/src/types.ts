@@ -95,6 +95,26 @@ export interface Report {
   hosts?: Host[];
   // The software recognized on the open ports.
   technologies?: Tech[];
+  // The API documents served without auth.
+  apis?: Api[];
+}
+
+export interface Api {
+  port: number;
+  url: string;
+  // `OpenAPI 3.0.1`, `Swagger 2.0`.
+  spec: string;
+  title: string;
+  version: string;
+  schemes: string[];
+  operations: Operation[];
+}
+
+export interface Operation {
+  method: string;
+  path: string;
+  summary: string;
+  secured: boolean;
 }
 
 export interface Tech {

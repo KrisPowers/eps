@@ -74,6 +74,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
         ? <Changes scan={scan} report={report} previous={previous} />
         : page === "history" ? <History scan={scan} history={history} />
         : page === "tech" ? <Later scan={scan} ready={report}>{(r) => <Technologies id={scan.id} report={r} />}</Later>
+        : page === "api" ? <Later scan={scan} ready={report}>{(r) => <Apis report={r} />}</Later>
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -311,6 +312,46 @@ function Technologies({ id, report }: { id: string; report: Report }) {
                 </li>
               ))}
             </ul>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// Apis is every API document the scan found served without auth: what it
+// is and the security it defines, then each operation it lists, with the
+// ones that change data and declare no security marked.
+function Apis({ report }: { report: Report }) {
+  const all = report.apis ?? [];
+  if (!all.length) return <div className="card empty">No OpenAPI or Swagger document found served without auth</div>;
+  return (
+    <div className="stack">
+      {all.map((a) => {
+        const open = a.operations.filter((o) => !o.secured && ["POST", "PUT", "PATCH", "DELETE"].includes(o.method));
+        return (
+          <Card key={a.url} title={`${a.title || "Untitled API"} ${a.version}`}
+            sub={<>{a.spec} at <code>{a.url}</code></>}
+            action={open.length > 0 && <span className="chip warn">{open.length} write {open.length === 1 ? "operation" : "operations"} without auth</span>}>
+            <dl className="facts-list">
+              <dt>Security</dt>
+              <dd>{a.schemes.length ? a.schemes.map((s) => <span key={s} className="port-chip">{s}</span>) : <span className="chip warn">None defined</span>}</dd>
+            </dl>
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th className="grow">Summary</th></tr></thead>
+                <tbody>
+                  {a.operations.map((o) => (
+                    <tr key={o.method + o.path}>
+                      <td><span className={"method " + o.method.toLowerCase()}>{o.method}</span></td>
+                      <td className="mono">{o.path}</td>
+                      <td>{o.secured ? <span className="chip ok">Required</span> : <span className={"chip " + (open.includes(o) ? "warn" : "plain")}>None</span>}</td>
+                      <td className="muted">{o.summary}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
         );
       })}

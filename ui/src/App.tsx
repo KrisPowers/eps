@@ -128,7 +128,12 @@ export function App() {
                   {isRange(selected)
                     ? <NavItem to={href(selected.id)} icon="devices" label="Hosts" on={page === "findings"} />
                     : <NavItem to={href(selected.id)} icon="shield" label="Findings" on={page === "findings"} />}
-                  {!isRange(selected) && <NavItem to={href(selected.id, "tech")} icon="dns" label="Technologies" on={page === "tech"} />}
+                  {!isRange(selected) && (
+                    <>
+                      <NavItem to={href(selected.id, "tech")} icon="dns" label="Technologies" on={page === "tech"} />
+                      <NavItem to={href(selected.id, "api")} icon="lock" label="API" on={page === "api"} />
+                    </>
+                  )}
                   <NavItem to={href(selected.id, "history")} icon="history" label="History" on={page === "history"} />
                   <NavItem to={href(selected.id, "changes")} icon="difference" label="Changes" on={page === "changes"} />
                 </>

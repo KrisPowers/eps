@@ -7,6 +7,7 @@
 use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use endpoints::api::ApiSpec;
 use endpoints::tls::{Cert, TlsReport};
 use endpoints::{AuthState, Endpoint, ServiceReport};
 use scanner::scan::OpenPort;
@@ -51,6 +52,16 @@ pub struct Report {
     /// The software recognized on the open ports; see [`technologies`].
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub technologies: Vec<Tech>,
+    /// The API documents served without auth, and what they list.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub apis: Vec<ApiView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ApiView {
+    pub port: u16,
+    #[serde(flatten)]
+    pub spec: ApiSpec,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -202,6 +213,7 @@ pub fn build_findings(open_ports: &[OpenPort], services: &[ServiceReport]) -> Ve
             findings.extend(tls_findings(svc.port, tls, now()));
         }
         findings.extend(header_findings(svc));
+        findings.extend(svc.apis.iter().filter_map(|a| api_finding(svc.port, a)));
 
         // Cleartext transport note, raised once per plaintext service that has
         // any openly reachable endpoint.
@@ -339,6 +351,25 @@ fn header_findings(svc: &ServiceReport) -> Vec<Finding> {
         });
     }
     out
+}
+
+/// An API document listing operations that change data with no security
+/// requirement on them.
+fn api_finding(port: u16, api: &ApiSpec) -> Option<Finding> {
+    let open = api
+        .operations
+        .iter()
+        .filter(|o| o.writes() && !o.secured)
+        .count();
+    (open > 0).then(|| Finding {
+        severity: Severity::Medium,
+        title: "API lists write operations without auth".to_string(),
+        location: format!("{} (port {port})", api.url),
+        detail: format!(
+            "{open} operations that change data (POST, PUT, PATCH, DELETE) declare no security requirement in {}. Confirm the API enforces auth on them.",
+            if api.title.is_empty() { "its document" } else { api.title.as_str() }
+        ),
+    })
 }
 
 fn endpoint_findings(svc: &ServiceReport, ep: &Endpoint) -> Vec<Finding> {
@@ -488,6 +519,15 @@ pub fn assemble(
         findings,
         hosts: Vec::new(),
         technologies: Vec::new(),
+        apis: services
+            .iter()
+            .flat_map(|s| {
+                s.apis.iter().map(|a| ApiView {
+                    port: s.port,
+                    spec: a.clone(),
+                })
+            })
+            .collect(),
     }
 }
 
@@ -525,6 +565,7 @@ pub fn assemble_range(target: &str, hosts: &[(IpAddr, Vec<OpenPort>)]) -> Report
         findings,
         hosts: views,
         technologies: Vec::new(),
+        apis: Vec::new(),
     }
 }
 
@@ -569,6 +610,7 @@ mod tests {
             reachable: true,
             endpoints: vec![page.clone(), page],
             tls: None,
+            apis: Vec::new(),
         };
         let titles: Vec<String> = header_findings(&svc).into_iter().map(|f| f.title).collect();
         assert_eq!(
@@ -589,6 +631,7 @@ mod tests {
             reachable: true,
             endpoints: vec![open_ep("/actuator/env", true, 200)],
             tls: None,
+            apis: Vec::new(),
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.iter().any(|x| x.severity == Severity::High));
@@ -617,6 +660,7 @@ mod tests {
                 open_ep("/api", false, 200),
             ],
             tls: None,
+            apis: Vec::new(),
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.windows(2).all(|w| w[0].severity >= w[1].severity));

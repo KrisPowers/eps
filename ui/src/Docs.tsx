@@ -73,6 +73,7 @@ export function Docs() {
         <p>An HTTPS port's page shows its certificate: who it names, who issued it, the dates it is good for and the names it covers, and whether the port still accepts TLS 1.0 or 1.1.</p>
         <p>A range opens on its <b>Hosts</b>: each host that answered, with its open ports. <b>Scan host</b> scans one of them in full.</p>
         <p><b>Technologies</b> lists the software recognized on each port, from what the scan already saw: <code>Server</code> and <code>X-Powered-By</code> headers, session cookie names, paths only one product answers, and service greetings.</p>
+        <p><b>API</b> reads any OpenAPI or Swagger document a port serves without auth at a conventional path, and lists its operations, marking those that change data with no security requirement declared.</p>
         <p><b>History</b> lists every kept scan of the same target, with a bar per finished scan of what it found, so a trend shows at a glance.</p>
         <p><b>Changes</b> compares a finished scan with the last finished scan of the same target: ports that opened or closed, findings that are new or resolved.</p>
         <p><b>Export</b> downloads a finished scan as JSON, the same report <code>--json</code> prints; Markdown, to paste into a ticket; or SARIF, for code-scanning tools such as GitHub's.</p>

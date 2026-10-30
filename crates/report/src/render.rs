@@ -452,6 +452,37 @@ fn tech_section(paint: Paint, report: &Report, out: &mut String) {
     }
 }
 
+/// Each API document served openly: what it is, then its operations, those
+/// that change data without auth marked.
+fn api_section(paint: Paint, report: &Report, out: &mut String) {
+    const SHOWN: usize = 15;
+    for a in &report.apis {
+        heading(paint, "API", &a.spec.url, out);
+        let title = format!("{} {}", a.spec.title, a.spec.version);
+        let count = plural(a.spec.operations.len(), "operation", "operations");
+        let mut row = Row::new(paint);
+        row.add("1", &fit(&title, WIDTH / 2));
+        row.add(ACCENT, &format!("  {}  ·  {count}", a.spec.spec));
+        row.finish(out);
+        for op in a.spec.operations.iter().take(SHOWN) {
+            let mut row = Row::new(paint);
+            row.add("1", &op.method);
+            row.pad_to(9);
+            row.add("", &fit(&op.path, 40));
+            if op.writes() && !op.secured {
+                row.pad_to(51);
+                row.add("1;33", "no auth declared");
+            }
+            row.finish(out);
+        }
+        if a.spec.operations.len() > SHOWN {
+            let mut row = Row::new(paint);
+            row.add(ACCENT, &format!("and {} more", a.spec.operations.len() - SHOWN));
+            row.finish(out);
+        }
+    }
+}
+
 /// Each HTTPS service's certificate, and any old TLS versions it accepts.
 fn tls_section(paint: Paint, report: &Report, out: &mut String) {
     for p in &report.open_ports {
@@ -551,6 +582,7 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
     }
     tech_section(paint, report, &mut out);
     tls_section(paint, report, &mut out);
+    api_section(paint, report, &mut out);
 
     let served: Vec<&ServiceReport> = services
         .iter()

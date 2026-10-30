@@ -311,6 +311,8 @@ dependencies = [
  "anyhow",
  "futures",
  "reqwest",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

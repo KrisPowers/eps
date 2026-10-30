@@ -19,6 +19,9 @@ command:
 - **Technologies** - the software recognized on each port (web server,
   language, framework, database, SSH and mail servers, with versions where
   shown), from headers, cookie names, product-specific paths and greetings.
+- **API** - any OpenAPI or Swagger document served without auth at a
+  conventional path (`/openapi.json`, `/v3/api-docs`, ...), read for the
+  operations it lists and whether each requires auth.
 - **Greetings** - what each service says first on connect, such as SSH's or
   MySQL's version line. It only listens; nothing is sent.
 - **Posture** - for each endpoint it checks whether it is reachable **without
@@ -161,7 +164,8 @@ Findings are prioritized by potential impact:
   MongoDB, a database, the Docker API, etcd, kubelet, ...).
 - **MEDIUM** - exposed services like RDP, VNC, SMB, FTP, or message brokers; an
   expired TLS certificate; TLS 1.0 or 1.1 still accepted; CORS allowing any
-  origin with credentials.
+  origin with credentials; an API document listing write operations without
+  auth.
 - **LOW** - cleartext HTTP carrying open endpoints; open API surfaces with no
   rate-limit headers; no throttling observed under an opt-in burst; a
   self-signed certificate, or one expiring within 30 days; HTTPS without HSTS,
