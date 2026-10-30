@@ -10,13 +10,14 @@
 //!
 //! Every request is a plain `GET`. Nothing is written, submitted, or mutated.
 //! An HTTPS service's certificate and legacy TLS support are read too (see
-//! [`tls`]).
+//! [`tls`]), and any OpenAPI or Swagger document it serves openly ([`api`]).
 
 use std::time::Duration;
 
 use futures::stream::{self, StreamExt};
 use reqwest::{redirect::Policy, Client, StatusCode};
 
+pub mod api;
 pub mod paths;
 pub mod tls;
 
@@ -229,6 +230,8 @@ pub struct ServiceReport {
     pub endpoints: Vec<Endpoint>,
     /// For HTTPS, what its TLS showed.
     pub tls: Option<tls::TlsReport>,
+    /// The API documents it serves without auth.
+    pub apis: Vec<api::ApiSpec>,
 }
 
 fn build_client(cfg: &HttpConfig) -> anyhow::Result<Client> {
@@ -384,6 +387,7 @@ pub async fn inspect_service(
                 reachable: false,
                 endpoints: Vec::new(),
                 tls: None,
+                apis: Vec::new(),
             })
         }
     };
@@ -410,12 +414,33 @@ pub async fn inspect_service(
     let mut endpoints = endpoints;
     endpoints.sort_by(|a, b| a.path.cmp(&b.path));
 
+    // Read each API document it serves openly, once per distinct document.
+    let mut apis: Vec<api::ApiSpec> = Vec::new();
+    let docs = endpoints
+        .iter()
+        .filter(|e| e.auth == AuthState::Open && api::SPEC_PATHS.contains(&e.path.as_str()));
+    for ep in docs {
+        let Ok(resp) = client.get(&ep.url).send().await else {
+            continue;
+        };
+        let Ok(body) = resp.text().await else {
+            continue;
+        };
+        if let Some(spec) = api::parse(&ep.url, &body) {
+            let same = |a: &api::ApiSpec| a.title == spec.title && a.operations == spec.operations;
+            if !apis.iter().any(same) {
+                apis.push(spec);
+            }
+        }
+    }
+
     Ok(ServiceReport {
         port,
         scheme: scheme.to_string(),
         reachable: true,
         endpoints,
         tls: tls_report,
+        apis,
     })
 }
 
