@@ -22,7 +22,6 @@
   --text-2: #aab3bf;
   --text-3: #7d8794;
   --accent: #4c8ff7;
-  --primary: #1d63ed;
   --ok: #3cc492;
   --warn: #f39b34;
   --bad: #f0524f;
@@ -210,13 +209,19 @@ b { font-weight: 500; }
 .stage-center { position: relative; width: min(440px, 100%); text-align: center; }
 .stage-label { font-size: 13px; font-weight: 500; color: var(--text-2); }
 
-/* The port being scanned sits in a pill above the bar; each new number rises
-   in as the last one rises out. */
-.sweep { display: grid; justify-items: center; gap: 16px; }
+/* The port being scanned sits in a pill coloured like the skeleton, with the
+   same shine passing over it; each new number rises in as the last one rises
+   out. */
+.sweep { display: grid; justify-items: center; }
 .sweep-pill {
-  display: inline-grid; place-items: center; min-width: 88px; height: 32px; padding: 0 14px;
-  border-radius: 6px; background: var(--primary); color: #fff; font: 500 14px var(--mono);
-  font-variant-numeric: tabular-nums;
+  position: relative; display: inline-grid; place-items: center; min-width: 88px; height: 32px; padding: 0 14px;
+  overflow: hidden; border-radius: 6px; background: var(--bone); color: var(--text-2);
+  font: 500 14px var(--mono); font-variant-numeric: tabular-nums;
+}
+.sweep-pill::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--bone-shine) 80%, transparent) 50%, transparent 100%) 0 0 / 300% 100%;
+  animation: shine 1.4s ease-in-out infinite;
 }
 .ticker { display: inline-grid; height: 20px; line-height: 20px; overflow: hidden; }
 .ticker > span { grid-area: 1 / 1; text-align: center; }
@@ -224,10 +229,6 @@ b { font-weight: 500; }
 .ticker-was { animation: tick-out .28s var(--ease) both; }
 @keyframes tick-in { from { opacity: 0; transform: translateY(70%); } }
 @keyframes tick-out { to { opacity: 0; transform: translateY(-70%); } }
-.sweep .bar { width: 100%; height: 6px; border-radius: 3px; }
-
-.bar { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
-.bar > div { height: 100%; background: var(--primary); transition: width .7s linear; }
 
 /* The catalog: one tile per open port. */
 .catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
