@@ -311,6 +311,7 @@ dependencies = [
  "anyhow",
  "futures",
  "reqwest",
+ "tokio",
 ]
 
 [[package]]

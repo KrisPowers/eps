@@ -8,6 +8,8 @@
 //!      over TLS, and does it advertise/enforce rate limiting.
 //!
 //! Every request is a plain `GET`. Nothing is written, submitted, or mutated.
+//! An HTTPS service's certificate and legacy TLS support are read too (see
+//! [`tls`]).
 
 use std::time::Duration;
 
@@ -15,6 +17,7 @@ use futures::stream::{self, StreamExt};
 use reqwest::{redirect::Policy, Client, StatusCode};
 
 pub mod paths;
+pub mod tls;
 
 /// Response headers that indicate rate limiting is advertised or active.
 const RATE_LIMIT_HEADERS: &[&str] = &[
@@ -151,6 +154,8 @@ pub struct ServiceReport {
     pub scheme: String,
     pub reachable: bool,
     pub endpoints: Vec<Endpoint>,
+    /// For HTTPS, what its TLS showed.
+    pub tls: Option<tls::TlsReport>,
 }
 
 fn build_client(cfg: &HttpConfig) -> anyhow::Result<Client> {
@@ -160,6 +165,7 @@ fn build_client(cfg: &HttpConfig) -> anyhow::Result<Client> {
         .connect_timeout(cfg.timeout)
         .redirect(Policy::none())
         .danger_accept_invalid_certs(!cfg.strict_tls)
+        .tls_info(true)
         .tcp_nodelay(true)
         .build()?)
 }
@@ -168,14 +174,15 @@ fn authority(host: &str, port: u16) -> String {
     format!("{host}:{port}")
 }
 
-/// Decide whether a port speaks HTTP and over which scheme. `hint` is the
-/// catalog guess: `Some(true)` HTTPS, `Some(false)` HTTP, `None` unknown.
+/// Decide whether a port speaks HTTP and over which scheme, with the
+/// certificate it presented over HTTPS. `hint` is the catalog guess:
+/// `Some(true)` HTTPS, `Some(false)` HTTP, `None` unknown.
 async fn detect_scheme(
     client: &Client,
     host: &str,
     port: u16,
     hint: Option<bool>,
-) -> Option<&'static str> {
+) -> Option<(&'static str, Option<Vec<u8>>)> {
     let order: &[&str] = match hint {
         Some(true) => &["https"],
         Some(false) => &["http"],
@@ -184,8 +191,13 @@ async fn detect_scheme(
     for scheme in order {
         let url = format!("{scheme}://{}/", authority(host, port));
         // Any HTTP response (even an error status) proves the scheme speaks HTTP.
-        if client.get(&url).send().await.is_ok() {
-            return Some(scheme);
+        if let Ok(resp) = client.get(&url).send().await {
+            let cert = resp
+                .extensions()
+                .get::<reqwest::tls::TlsInfo>()
+                .and_then(|t| t.peer_certificate())
+                .map(<[u8]>::to_vec);
+            return Some((scheme, cert));
         }
     }
     None
@@ -286,18 +298,27 @@ pub async fn inspect_service(
 ) -> anyhow::Result<ServiceReport> {
     let client = build_client(cfg)?;
 
-    let scheme = match detect_scheme(&client, host, port, hint).await {
-        Some(s) => s,
+    let (scheme, cert) = match detect_scheme(&client, host, port, hint).await {
+        Some(found) => found,
         None => {
             return Ok(ServiceReport {
                 port,
                 scheme: "http".to_string(),
                 reachable: false,
                 endpoints: Vec::new(),
+                tls: None,
             })
         }
     };
     let tls = scheme == "https";
+    let tls_report = if tls {
+        Some(tls::TlsReport {
+            cert: cert.as_deref().and_then(tls::parse),
+            legacy: tls::legacy(host, port, cfg.timeout.min(Duration::from_secs(3))).await,
+        })
+    } else {
+        None
+    };
 
     let endpoints: Vec<Endpoint> = stream::iter(cfg.paths.iter())
         .map(|spec| {
@@ -317,6 +338,7 @@ pub async fn inspect_service(
         scheme: scheme.to_string(),
         reachable: true,
         endpoints,
+        tls: tls_report,
     })
 }
 

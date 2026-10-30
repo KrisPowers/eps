@@ -11,6 +11,9 @@ command:
 - **Endpoints** - for HTTP(S) services it discovers conventional,
   framework-published paths (health probes, metrics, API docs, management
   consoles, and classic over-exposure sources like `/actuator/env` or `/.git/HEAD`).
+- **TLS** - for each HTTPS service, its certificate (subject, issuer, validity,
+  the names it covers, self-signed or not) and whether it still accepts TLS 1.0
+  or 1.1, found with a ClientHello offering only that version.
 - **Greetings** - what each service says first on connect, such as SSH's or
   MySQL's version line. It only listens; nothing is sent.
 - **Posture** - for each endpoint it checks whether it is reachable **without
@@ -143,9 +146,11 @@ Findings are prioritized by potential impact:
 - **HIGH** - an unauthenticated **sensitive** endpoint (e.g. `/actuator/env`,
   `/metrics`, `/.env`, `/.git/HEAD`), or an exposed high-risk service (Redis,
   MongoDB, a database, the Docker API, etcd, kubelet, ...).
-- **MEDIUM** - exposed services like RDP, VNC, SMB, FTP, or message brokers.
+- **MEDIUM** - exposed services like RDP, VNC, SMB, FTP, or message brokers; an
+  expired TLS certificate; TLS 1.0 or 1.1 still accepted.
 - **LOW** - cleartext HTTP carrying open endpoints; open API surfaces with no
-  rate-limit headers; no throttling observed under an opt-in burst.
+  rate-limit headers; no throttling observed under an opt-in burst; a
+  self-signed certificate, or one expiring within 30 days.
 - **INFO** - positive signals, e.g. a sensitive path that is correctly behind auth.
 
 portscan reports *exposure and posture*, never intent - it can't know whether a given

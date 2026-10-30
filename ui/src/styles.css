@@ -310,6 +310,11 @@ a.result:hover { background: var(--hover); }
 .legend { display: flex; flex-wrap: wrap; gap: 16px; }
 .card-head .legend { padding-top: 6px; justify-content: flex-end; }
 
+/* Label and value pairs, such as a certificate's. */
+.facts-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px 32px; margin: 0; padding: 4px 24px 24px; }
+.facts-list dt { color: var(--text-2); }
+.facts-list dd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; min-width: 0; }
+
 .findings { list-style: none; margin: 0; padding: 0; }
 .finding { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: start; gap: 4px 14px; padding: 12px 24px; border-top: 1px solid var(--line); }
 .finding .chip { justify-self: start; margin-top: 1px; }
