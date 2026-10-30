@@ -8,6 +8,7 @@ use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use endpoints::api::ApiSpec;
+use scanner::dns::Record;
 use endpoints::tls::{Cert, TlsReport};
 use endpoints::{AuthState, Endpoint, ServiceReport};
 use scanner::scan::OpenPort;
@@ -55,6 +56,92 @@ pub struct Report {
     /// The API documents served without auth, and what they list.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub apis: Vec<ApiView>,
+    /// The target's DNS records; see [`add_dns`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub dns: Vec<DnsView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DnsView {
+    pub name: String,
+    pub kind: &'static str,
+    pub value: String,
+    pub ttl: u32,
+}
+
+/// Adds `host`'s DNS records to the report, with what they're worth
+/// flagging about its mail: no SPF or DMARC for a domain that takes mail,
+/// SPF letting anyone send, DMARC that only monitors.
+pub fn add_dns(report: &mut Report, host: &str, records: &[Record]) {
+    report.dns = records
+        .iter()
+        .map(|r| DnsView {
+            name: r.name.clone(),
+            kind: r.kind,
+            value: r.value.clone(),
+            ttl: r.ttl,
+        })
+        .collect();
+    report.findings.extend(dns_findings(host, records));
+    report.findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
+}
+
+/// The TXT records at `name`.
+fn texts<'a>(records: &'a [Record], name: &str) -> Vec<&'a str> {
+    records
+        .iter()
+        .filter(|r| r.kind == "TXT" && r.name.eq_ignore_ascii_case(name))
+        .map(|r| r.value.as_str())
+        .collect()
+}
+
+fn dns_findings(host: &str, records: &[Record]) -> Vec<Finding> {
+    let mut out = Vec::new();
+    if !records.iter().any(|r| r.kind == "MX") {
+        return out;
+    }
+    let loc = format!("dns {host}");
+    let finding = |severity, title: &str, detail: String| Finding {
+        severity,
+        title: title.to_string(),
+        location: loc.clone(),
+        detail,
+    };
+    let spf: Vec<&str> = texts(records, host)
+        .into_iter()
+        .filter(|v| v.starts_with("v=spf1"))
+        .collect();
+    let dmarc: Vec<&str> = texts(records, &format!("_dmarc.{host}"))
+        .into_iter()
+        .filter(|v| v.starts_with("v=DMARC1"))
+        .collect();
+    if spf.is_empty() {
+        out.push(finding(
+            Severity::Low,
+            "No SPF record",
+            format!("{host} takes mail but publishes no SPF record, so nothing says which servers may send as it. Publish a v=spf1 record."),
+        ));
+    } else if spf.iter().any(|v| v.split_whitespace().any(|t| t == "+all" || t == "all")) {
+        out.push(finding(
+            Severity::Medium,
+            "SPF lets any server send",
+            format!("{host}'s SPF record ends in +all, so it vouches for mail from anywhere. End it in -all or ~all."),
+        ));
+    }
+    if dmarc.is_empty() {
+        out.push(finding(
+            Severity::Low,
+            "No DMARC record",
+            format!("{host} takes mail but publishes no DMARC policy at _dmarc.{host}, so receivers aren't told to reject spoofed mail. Publish one."),
+        ));
+    } else if dmarc.iter().any(|v| v.replace(' ', "").contains("p=none")) {
+        out.push(finding(
+            Severity::Low,
+            "DMARC only monitors",
+            format!("{host}'s DMARC policy is p=none, so spoofed mail is reported but still delivered. Move to quarantine or reject."),
+        ));
+    }
+    out
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -519,6 +606,7 @@ pub fn assemble(
         findings,
         hosts: Vec::new(),
         technologies: Vec::new(),
+        dns: Vec::new(),
         apis: services
             .iter()
             .flat_map(|s| {
@@ -566,6 +654,7 @@ pub fn assemble_range(target: &str, hosts: &[(IpAddr, Vec<OpenPort>)]) -> Report
         hosts: views,
         technologies: Vec::new(),
         apis: Vec::new(),
+        dns: Vec::new(),
     }
 }
 
@@ -664,6 +753,37 @@ mod tests {
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.windows(2).all(|w| w[0].severity >= w[1].severity));
+    }
+
+    fn rec(name: &str, kind: &'static str, value: &str) -> Record {
+        Record {
+            name: name.to_string(),
+            kind,
+            value: value.to_string(),
+            ttl: 300,
+        }
+    }
+
+    #[test]
+    fn mail_without_spf_or_dmarc() {
+        let records = [rec("shop.example", "MX", "10 mail.shop.example")];
+        let titles: Vec<String> = dns_findings("shop.example", &records)
+            .into_iter()
+            .map(|f| f.title)
+            .collect();
+        assert_eq!(titles, ["No SPF record", "No DMARC record"]);
+
+        let records = [
+            rec("shop.example", "MX", "10 mail.shop.example"),
+            rec("shop.example", "TXT", "v=spf1 include:mail.example +all"),
+            rec("_dmarc.shop.example", "TXT", "v=DMARC1; p=none"),
+        ];
+        let titles: Vec<String> = dns_findings("shop.example", &records)
+            .into_iter()
+            .map(|f| f.title)
+            .collect();
+        assert_eq!(titles, ["SPF lets any server send", "DMARC only monitors"]);
+        assert!(dns_findings("shop.example", &records[1..]).is_empty());
     }
 
     #[test]

@@ -22,6 +22,9 @@ command:
 - **API** - any OpenAPI or Swagger document served without auth at a
   conventional path (`/openapi.json`, `/v3/api-docs`, ...), read for the
   operations it lists and whether each requires auth.
+- **DNS** - the target's records (A, AAAA, CNAME, MX, NS, TXT, CAA, DMARC and
+  the reverse name), asked of the system resolver, with SPF and DMARC checked
+  for a domain that takes mail.
 - **Greetings** - what each service says first on connect, such as SSH's or
   MySQL's version line. It only listens; nothing is sent.
 - **Posture** - for each endpoint it checks whether it is reachable **without
@@ -168,7 +171,8 @@ Findings are prioritized by potential impact:
   auth.
 - **LOW** - cleartext HTTP carrying open endpoints; open API surfaces with no
   rate-limit headers; no throttling observed under an opt-in burst; a
-  self-signed certificate, or one expiring within 30 days; HTTPS without HSTS,
+  self-signed certificate, or one expiring within 30 days; no SPF or DMARC for a
+  domain that takes mail; HTTPS without HSTS,
   pages without CSP or framing protection, cookies missing their flags.
 - **INFO** - positive signals, e.g. a sensitive path that is correctly behind auth.
 

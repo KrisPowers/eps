@@ -75,6 +75,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
         : page === "history" ? <History scan={scan} history={history} />
         : page === "tech" ? <Later scan={scan} ready={report}>{(r) => <Technologies id={scan.id} report={r} />}</Later>
         : page === "api" ? <Later scan={scan} ready={report}>{(r) => <Apis report={r} />}</Later>
+        : page === "dns" ? <Later scan={scan} ready={report}>{(r) => <Dns host={scan.target.split(":")[0]} report={r} />}</Later>
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -355,6 +356,56 @@ function Apis({ report }: { report: Report }) {
           </Card>
         );
       })}
+    </div>
+  );
+}
+
+// Dns is the target's DNS records: its mail protection at a glance, SPF
+// and DMARC, then every record by kind.
+function Dns({ host, report }: { host: string; report: Report }) {
+  const all = report.dns ?? [];
+  if (!all.length) return <div className="card empty">No DNS records. An address gets only its reverse name, and a resolver is needed to ask.</div>;
+  const txt = (name: string, prefix: string) => all.find((r) => r.kind === "TXT" && r.name.toLowerCase() === name.toLowerCase() && r.value.startsWith(prefix));
+  const mail = all.some((r) => r.kind === "MX");
+  const spf = txt(host, "v=spf1");
+  const dmarc = txt("_dmarc." + host, "v=DMARC1");
+  const kinds = [...new Set(all.map((r) => r.kind))];
+  // Its findings name no port, so they show here rather than on Findings.
+  const notes = report.findings.filter((f) => f.location.startsWith("dns "));
+  return (
+    <div className="stack">
+      {notes.length > 0 && (
+        <Card title="Findings" sub={plural(notes.length, "finding")}>
+          <ul className="findings">{notes.map((f, k) => <FindingRow key={k} finding={f} />)}</ul>
+        </Card>
+      )}
+      {mail && (
+        <Card title="Mail" sub="Who may send as this domain, and what receivers do with mail that fails">
+          <dl className="facts-list">
+            <dt>SPF</dt>
+            <dd>{spf ? <code className="command-line">{spf.value}</code> : <span className="chip warn">None</span>}</dd>
+            <dt>DMARC</dt>
+            <dd>{dmarc ? <code className="command-line">{dmarc.value}</code> : <span className="chip warn">None</span>}</dd>
+          </dl>
+        </Card>
+      )}
+      <Card title="Records" sub={plural(all.length, "record")}>
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Type</th><th>Name</th><th className="grow">Value</th><th>TTL</th></tr></thead>
+            <tbody>
+              {kinds.flatMap((k) => all.filter((r) => r.kind === k)).map((r, i) => (
+                <tr key={i}>
+                  <td><span className="method">{r.kind}</span></td>
+                  <td className="mono">{r.name}</td>
+                  <td className="mono wrap">{r.value}</td>
+                  <td className="muted">{r.ttl}s</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }
