@@ -143,36 +143,46 @@ pub(crate) async fn scan_target(
     )
     .await;
 
+    // What one port exposes, its endpoints and findings, goes into
+    // `progress` as soon as nothing more is coming for it.
+    let rendered_ip = ip.to_string();
+    let checked = |op: &scan::OpenPort, svc: &[ServiceReport]| {
+        let r = report::assemble(&target.host, &rendered_ip, std::slice::from_ref(op), svc);
+        let found = serde_json::json!({ "endpoints": r.endpoints, "findings": r.findings });
+        progress.checked(op.port, found);
+    };
+
     // HTTP endpoint discovery + posture checks.
     let services: Vec<ServiceReport> = if opts.no_discovery {
+        open_ports.iter().for_each(|op| checked(op, &[]));
         Vec::new()
     } else {
         let cfg = build_http_config(opts);
         let mut reports = Vec::new();
         // Inspect ports that are known HTTP, or unknown (could be any app),
         // but skip ports whose catalog service is a known non-HTTP protocol.
-        let candidates: Vec<_> = open_ports
+        let (candidates, rest): (Vec<_>, Vec<_>) = open_ports
             .iter()
-            .filter(|op| op.http_tls.is_some() || op.service == "unknown")
-            .collect();
+            .partition(|op| op.http_tls.is_some() || op.service == "unknown");
+        rest.into_iter().for_each(|op| checked(op, &[]));
         progress.start_endpoints(candidates.len());
         for op in candidates {
             progress.inspecting(op.port);
             match endpoints::inspect_service(&target.url_host(), op.port, op.http_tls, &cfg).await {
                 Ok(r) => {
-                    progress.inspected(r.endpoints.len());
+                    checked(op, std::slice::from_ref(&r));
                     reports.push(r);
                 }
                 Err(e) => {
-                    progress.inspected(0);
+                    checked(op, &[]);
                     eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port);
                 }
             }
+            progress.inspected();
         }
         reports
     };
 
-    let rendered_ip = ip.to_string();
     let report = report::assemble(&target.host, &rendered_ip, &open_ports, &services);
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {

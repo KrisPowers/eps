@@ -1,8 +1,10 @@
 //! Where a scan is while it runs: the phase, how many ports are done and the
-//! highest one reached, the open ports found so far, and which service is
-//! being inspected. `--serve` hands a snapshot to the dashboard, which draws
-//! the scan as it goes.
+//! highest one reached, the open ports found so far, which service is being
+//! inspected, and what each port that is done turned out to expose.
+//! `--serve` hands a snapshot to the dashboard, which draws the scan as it
+//! goes.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -33,7 +35,8 @@ pub struct Progress {
     services_done: AtomicUsize,
     /// The port whose HTTP service is being inspected, 0 for none.
     inspecting: AtomicUsize,
-    endpoints: AtomicUsize,
+    /// Each port that is done, with its endpoints and findings.
+    found: Mutex<HashMap<u16, Value>>,
 }
 
 impl Progress {
@@ -64,18 +67,27 @@ impl Progress {
         self.inspecting.store(port as usize, Ordering::Relaxed);
     }
 
-    pub fn inspected(&self, endpoints: usize) {
+    pub fn inspected(&self) {
         self.services_done.fetch_add(1, Ordering::Relaxed);
-        self.endpoints.fetch_add(endpoints, Ordering::Relaxed);
         self.inspecting.store(0, Ordering::Relaxed);
+    }
+
+    /// What one open port exposes, once nothing more is coming for it.
+    pub fn checked(&self, port: u16, what: Value) {
+        let mut found = self.found.lock().unwrap_or_else(|e| e.into_inner());
+        found.insert(port, what);
     }
 
     pub fn snapshot(&self) -> Value {
         let mut open = self.open.lock().unwrap_or_else(|e| e.into_inner()).clone();
         open.sort_unstable();
+        let found = self.found.lock().unwrap_or_else(|e| e.into_inner());
         let open: Vec<Value> = open
             .iter()
-            .map(|p| json!({ "port": p, "service": scanner::ports::service_name(*p) }))
+            .map(|p| {
+                let service = scanner::ports::service_name(*p);
+                json!({ "port": p, "service": service, "found": found.get(p) })
+            })
             .collect();
         let inspecting = self.inspecting.load(Ordering::Relaxed);
         json!({
@@ -88,7 +100,6 @@ impl Progress {
             "services_total": self.services_total.load(Ordering::Relaxed),
             "services_done": self.services_done.load(Ordering::Relaxed),
             "inspecting": if inspecting == 0 { Value::Null } else { json!(inspecting) },
-            "endpoints": self.endpoints.load(Ordering::Relaxed),
         })
     }
 }
