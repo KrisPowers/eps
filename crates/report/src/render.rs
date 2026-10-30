@@ -4,7 +4,7 @@
 
 use std::io::IsTerminal;
 
-use endpoints::{AuthState, Endpoint, ServiceReport};
+use endpoints::{AuthState, Cookie, Endpoint, ServiceReport};
 use serde::Serialize;
 
 use crate::{risky_service, Report};
@@ -95,7 +95,7 @@ fn status_tint(status: u16) -> &'static str {
 }
 
 /// How far a security control is set up on one endpoint.
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Posture {
     /// Set up and holding.
@@ -192,6 +192,89 @@ pub(crate) fn rate(ep: &Endpoint) -> Posture {
         Some((_, false)) if advertised => Posture::Insecure,
         None if advertised => Posture::Configured,
         _ => Posture::Missing,
+    }
+}
+
+/// Whether the response is a page a browser renders, which is what CSP and
+/// framing protection guard.
+pub(crate) fn html(ep: &Endpoint) -> bool {
+    ep.content_type
+        .as_deref()
+        .is_some_and(|t| t.to_ascii_lowercase().contains("html"))
+}
+
+/// HSTS, which only means anything over HTTPS; `max-age=0` turns it off.
+pub(crate) fn hsts(ep: &Endpoint) -> Posture {
+    match (&ep.headers.hsts, ep.tls) {
+        (_, false) => Posture::Unknown,
+        (Some(v), true) if v.to_ascii_lowercase().contains("max-age=0") => Posture::Insecure,
+        (Some(_), true) => Posture::Configured,
+        (None, true) => Posture::Missing,
+    }
+}
+
+/// A content security policy, weakened when it allows inline or evaluated
+/// script. Only a page needs one.
+pub(crate) fn csp(ep: &Endpoint) -> Posture {
+    match &ep.headers.csp {
+        Some(v) if v.contains("'unsafe-inline'") || v.contains("'unsafe-eval'") => Posture::Insecure,
+        Some(_) => Posture::Configured,
+        None if html(ep) => Posture::Missing,
+        None => Posture::Unknown,
+    }
+}
+
+/// Protection from being framed, by `X-Frame-Options` or CSP
+/// `frame-ancestors`. Only a page can be framed.
+pub(crate) fn frame(ep: &Endpoint) -> Posture {
+    let ancestors = ep
+        .headers
+        .csp
+        .as_deref()
+        .is_some_and(|v| v.contains("frame-ancestors"));
+    if ep.headers.frame_options.is_some() || ancestors {
+        Posture::Configured
+    } else if html(ep) {
+        Posture::Missing
+    } else {
+        Posture::Unknown
+    }
+}
+
+/// `X-Content-Type-Options: nosniff`.
+pub(crate) fn nosniff(ep: &Endpoint) -> Posture {
+    match &ep.headers.content_type_options {
+        Some(v) if v.trim().eq_ignore_ascii_case("nosniff") => Posture::Configured,
+        Some(_) => Posture::Insecure,
+        None => Posture::Missing,
+    }
+}
+
+/// CORS, weakened when any origin is allowed. With no header sent, the
+/// response doesn't show.
+pub(crate) fn cors(ep: &Endpoint) -> Posture {
+    match ep.headers.cors_origin.as_deref().map(str::trim) {
+        None => Posture::Unknown,
+        Some("*" | "null") => Posture::Insecure,
+        Some(_) => Posture::Configured,
+    }
+}
+
+/// Whether one cookie has the flags that protect it: `HttpOnly`, a
+/// `SameSite`, and `Secure` when it came over HTTPS.
+pub(crate) fn cookie_ok(c: &Cookie, tls: bool) -> bool {
+    c.http_only && c.same_site.is_some() && (c.secure || !tls)
+}
+
+/// The cookies set, configured when every one has its flags.
+pub(crate) fn cookies(ep: &Endpoint) -> Posture {
+    let set = &ep.headers.cookies;
+    if set.is_empty() {
+        Posture::Unknown
+    } else if set.iter().all(|c| cookie_ok(c, ep.tls)) {
+        Posture::Configured
+    } else {
+        Posture::Insecure
     }
 }
 

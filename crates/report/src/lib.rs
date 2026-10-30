@@ -107,6 +107,18 @@ pub struct EndpointView {
     pub location: Option<String>,
     /// The verdict per security control, as the text report colors it.
     pub controls: Controls,
+    /// The verdict per security header, the same way.
+    pub headers: HeaderControls,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HeaderControls {
+    pub hsts: Posture,
+    pub csp: Posture,
+    pub frame: Posture,
+    pub nosniff: Posture,
+    pub cors: Posture,
+    pub cookies: Posture,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -174,6 +186,7 @@ pub fn build_findings(open_ports: &[OpenPort], services: &[ServiceReport]) -> Ve
         if let Some(tls) = &svc.tls {
             findings.extend(tls_findings(svc.port, tls, now()));
         }
+        findings.extend(header_findings(svc));
 
         // Cleartext transport note, raised once per plaintext service that has
         // any openly reachable endpoint.
@@ -255,6 +268,64 @@ fn tls_findings(port: u16, tls: &TlsReport, now: i64) -> Vec<Finding> {
     out
 }
 
+/// What a service's headers are worth flagging, once per service rather
+/// than per endpoint, from its openly reachable endpoints: no HSTS over
+/// HTTPS, pages without CSP or framing protection, and cookies missing
+/// their flags.
+fn header_findings(svc: &ServiceReport) -> Vec<Finding> {
+    let mut out = Vec::new();
+    let open: Vec<&Endpoint> = svc
+        .endpoints
+        .iter()
+        .filter(|e| e.auth == AuthState::Open)
+        .collect();
+    let loc = format!("port {} ({})", svc.port, svc.scheme);
+    if open.iter().any(|e| render::hsts(e) == Posture::Missing) {
+        out.push(Finding {
+            severity: Severity::Low,
+            title: "No HSTS on HTTPS service".to_string(),
+            location: loc.clone(),
+            detail: "Responses carry no Strict-Transport-Security header, so a browser can be steered to plain HTTP first. Send it with a long max-age.".to_string(),
+        });
+    }
+    let unguarded = open
+        .iter()
+        .any(|e| render::csp(e) == Posture::Missing || render::frame(e) == Posture::Missing);
+    if unguarded {
+        out.push(Finding {
+            severity: Severity::Low,
+            title: "Pages served without CSP or framing protection".to_string(),
+            location: loc.clone(),
+            detail: "HTML responses lack a Content-Security-Policy or X-Frame-Options, which limit injected script and clickjacking. Add both.".to_string(),
+        });
+    }
+    let mut loose: Vec<&str> = open
+        .iter()
+        .copied()
+        .flat_map(|e| {
+            e.headers
+                .cookies
+                .iter()
+                .filter(move |c| !render::cookie_ok(c, e.tls))
+                .map(|c| c.name.as_str())
+        })
+        .collect();
+    loose.sort_unstable();
+    loose.dedup();
+    if !loose.is_empty() {
+        out.push(Finding {
+            severity: Severity::Low,
+            title: "Cookies missing security flags".to_string(),
+            location: loc,
+            detail: format!(
+                "{} set without all of HttpOnly, SameSite and, over HTTPS, Secure. Add them so scripts and other sites can't read or send the cookies.",
+                loose.join(", ")
+            ),
+        });
+    }
+    out
+}
+
 fn endpoint_findings(svc: &ServiceReport, ep: &Endpoint) -> Vec<Finding> {
     let mut out = Vec::new();
     let loc = format!("{} (port {})", ep.url, svc.port);
@@ -301,6 +372,16 @@ fn endpoint_findings(svc: &ServiceReport, ep: &Endpoint) -> Vec<Finding> {
             });
         }
         _ => {}
+    }
+
+    let any_origin = ep.headers.cors_origin.as_deref().map(str::trim) == Some("*");
+    if any_origin && ep.headers.cors_credentials {
+        out.push(Finding {
+            severity: Severity::Medium,
+            title: "CORS allows any origin with credentials".to_string(),
+            location: loc.clone(),
+            detail: "Access-Control-Allow-Origin is * alongside Access-Control-Allow-Credentials: true. Name the origins that may call it instead.".to_string(),
+        });
     }
 
     // If an active burst actually drew a 429, that's a good signal worth noting.
@@ -372,6 +453,14 @@ pub fn assemble(
                     rate: render::rate(ep),
                     https: render::https(ep),
                 },
+                headers: HeaderControls {
+                    hsts: render::hsts(ep),
+                    csp: render::csp(ep),
+                    frame: render::frame(ep),
+                    nosniff: render::nosniff(ep),
+                    cors: render::cors(ep),
+                    cookies: render::cookies(ep),
+                },
             });
         }
     }
@@ -388,7 +477,7 @@ pub fn assemble(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endpoints::RateLimitInfo;
+    use endpoints::{Cookie, RateLimitInfo, SecurityHeaders};
 
     fn open_ep(path: &str, sensitive: bool, status: u16) -> Endpoint {
         Endpoint {
@@ -404,7 +493,37 @@ mod tests {
             www_authenticate: None,
             location: None,
             rate_limit: RateLimitInfo::default(),
+            headers: SecurityHeaders::default(),
         }
+    }
+
+    #[test]
+    fn header_findings_once_per_service() {
+        let mut page = open_ep("/", false, 200);
+        page.tls = true;
+        page.content_type = Some("text/html".to_string());
+        page.headers.cookies.push(Cookie {
+            name: "sid".to_string(),
+            secure: false,
+            http_only: true,
+            same_site: Some("Lax".to_string()),
+        });
+        let svc = ServiceReport {
+            port: 443,
+            scheme: "https".to_string(),
+            reachable: true,
+            endpoints: vec![page.clone(), page],
+            tls: None,
+        };
+        let titles: Vec<String> = header_findings(&svc).into_iter().map(|f| f.title).collect();
+        assert_eq!(
+            titles,
+            [
+                "No HSTS on HTTPS service",
+                "Pages served without CSP or framing protection",
+                "Cookies missing security flags"
+            ]
+        );
     }
 
     #[test]

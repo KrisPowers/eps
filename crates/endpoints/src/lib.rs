@@ -5,7 +5,8 @@
 //!   2. request each conventional path (redirects are *not* followed, so we can
 //!      see a login redirect for what it is), and
 //!   3. classify what we got back: is it reachable without auth, is it served
-//!      over TLS, and does it advertise/enforce rate limiting.
+//!      over TLS, does it advertise/enforce rate limiting, and which security
+//!      headers and cookie flags it sends.
 //!
 //! Every request is a plain `GET`. Nothing is written, submitted, or mutated.
 //! An HTTPS service's certificate and legacy TLS support are read too (see
@@ -130,6 +131,75 @@ impl RateLimitInfo {
     }
 }
 
+/// The security headers a response carried, as sent.
+#[derive(Debug, Clone, Default)]
+pub struct SecurityHeaders {
+    pub hsts: Option<String>,
+    pub csp: Option<String>,
+    pub frame_options: Option<String>,
+    pub content_type_options: Option<String>,
+    /// `Access-Control-Allow-Origin`.
+    pub cors_origin: Option<String>,
+    /// `Access-Control-Allow-Credentials: true`.
+    pub cors_credentials: bool,
+    pub cookies: Vec<Cookie>,
+}
+
+/// A cookie a response set, with the flags that protect it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cookie {
+    pub name: String,
+    pub secure: bool,
+    pub http_only: bool,
+    pub same_site: Option<String>,
+}
+
+/// Reads one `Set-Cookie` value. `None` when it names no cookie.
+pub fn cookie(line: &str) -> Option<Cookie> {
+    let mut parts = line.split(';');
+    let name = parts.next()?.split('=').next()?.trim().to_string();
+    if name.is_empty() {
+        return None;
+    }
+    let mut c = Cookie {
+        name,
+        secure: false,
+        http_only: false,
+        same_site: None,
+    };
+    for attr in parts {
+        let (key, value) = attr.split_once('=').unwrap_or((attr, ""));
+        let key = key.trim();
+        if key.eq_ignore_ascii_case("secure") {
+            c.secure = true;
+        } else if key.eq_ignore_ascii_case("httponly") {
+            c.http_only = true;
+        } else if key.eq_ignore_ascii_case("samesite") {
+            c.same_site = Some(value.trim().to_string());
+        }
+    }
+    Some(c)
+}
+
+fn security_headers(resp: &reqwest::Response) -> SecurityHeaders {
+    SecurityHeaders {
+        hsts: header_str(resp, "strict-transport-security"),
+        csp: header_str(resp, "content-security-policy"),
+        frame_options: header_str(resp, "x-frame-options"),
+        content_type_options: header_str(resp, "x-content-type-options"),
+        cors_origin: header_str(resp, "access-control-allow-origin"),
+        cors_credentials: header_str(resp, "access-control-allow-credentials")
+            .is_some_and(|v| v.trim().eq_ignore_ascii_case("true")),
+        cookies: resp
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .filter_map(cookie)
+            .collect(),
+    }
+}
+
 /// A single discovered, existing endpoint and its posture.
 #[derive(Debug, Clone)]
 pub struct Endpoint {
@@ -145,6 +215,7 @@ pub struct Endpoint {
     pub www_authenticate: Option<String>,
     pub location: Option<String>,
     pub rate_limit: RateLimitInfo,
+    pub headers: SecurityHeaders,
 }
 
 /// Result of inspecting one HTTP(S) service (one port).
@@ -266,6 +337,7 @@ async fn inspect_path(
     let content_type = header_str(&resp, "content-type");
     let www_authenticate = header_str(&resp, "www-authenticate");
     let location = header_str(&resp, "location");
+    let headers = security_headers(&resp);
 
     // Optional active throttling probe - only for openly reachable endpoints,
     // and only when the user explicitly opted in.
@@ -286,6 +358,7 @@ async fn inspect_path(
         www_authenticate,
         location,
         rate_limit,
+        headers,
     })
 }
 
@@ -375,6 +448,17 @@ mod tests {
         assert!(!info.any_signal());
         info.headers_seen.push("x-ratelimit-limit".to_string());
         assert!(info.any_signal());
+    }
+
+    #[test]
+    fn cookie_flags() {
+        let c = cookie("sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax").unwrap();
+        assert_eq!(c.name, "sid");
+        assert!(c.secure && c.http_only);
+        assert_eq!(c.same_site.as_deref(), Some("Lax"));
+        let bare = cookie("theme=dark").unwrap();
+        assert!(!bare.secure && !bare.http_only && bare.same_site.is_none());
+        assert_eq!(cookie("=x; Secure"), None);
     }
 
     #[test]

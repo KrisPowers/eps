@@ -72,6 +72,8 @@ export interface Endpoint {
   note: string;
   sensitive: boolean;
   controls: Record<"auth" | "jwt" | "rate" | "https", Posture>;
+  // Missing from reports made before headers were checked.
+  headers?: Record<"hsts" | "csp" | "frame" | "nosniff" | "cors" | "cookies", Posture>;
 }
 
 export interface Finding {

@@ -18,10 +18,19 @@ const CONTROLS: [string, string][] = [
   ["HTTPS", "Served over TLS."],
 ];
 
+const HEADERS: [string, string][] = [
+  ["HSTS", "Strict-Transport-Security over HTTPS. Bypassable with max-age=0."],
+  ["CSP", "A Content-Security-Policy on pages. Bypassable when it allows unsafe-inline or unsafe-eval."],
+  ["FRAME", "X-Frame-Options or CSP frame-ancestors on pages, against clickjacking."],
+  ["SNIFF", "X-Content-Type-Options: nosniff."],
+  ["CORS", "Access-Control-Allow-Origin. Bypassable when it allows any origin."],
+  ["COOKIE", "Every cookie set is HttpOnly, has a SameSite, and is Secure over HTTPS."],
+];
+
 const SEVERITIES: [string, string, string][] = [
   ["high", "bad", "A sensitive endpoint open without auth, such as /actuator/env, /.env or /.git/HEAD, or a high-risk service exposed: Redis, MongoDB, a database, the Docker API, etcd, kubelet."],
-  ["medium", "warn", "Exposed services like RDP, VNC, SMB, FTP or message brokers; an expired TLS certificate; TLS 1.0 or 1.1 still accepted."],
-  ["low", "plain", "Cleartext HTTP carrying open endpoints, open APIs with no rate-limit headers, no throttling under a burst, a self-signed certificate or one expiring within 30 days."],
+  ["medium", "warn", "Exposed services like RDP, VNC, SMB, FTP or message brokers; an expired TLS certificate; TLS 1.0 or 1.1 still accepted; CORS allowing any origin with credentials."],
+  ["low", "plain", "Cleartext HTTP carrying open endpoints, open APIs with no rate-limit headers, no throttling under a burst, a self-signed certificate or one expiring within 30 days, HTTPS without HSTS, pages without CSP or framing protection, cookies missing their flags."],
   ["info", "ok", "Good signs, such as a sensitive path correctly behind auth."],
 ];
 
@@ -76,6 +85,10 @@ export function Docs() {
         </div>
         <ul className="examples">
           {CONTROLS.map(([name, what]) => <li key={name}><span className="control unknown">{name}</span><span>{what}</span></li>)}
+        </ul>
+        <p>And a block per security header, coloured the same way. Headers that only matter on pages, such as CSP, don't show for other responses.</p>
+        <ul className="examples">
+          {HEADERS.map(([name, what]) => <li key={name}><span className="control unknown">{name}</span><span>{what}</span></li>)}
         </ul>
       </section>
 

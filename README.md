@@ -14,6 +14,8 @@ command:
 - **TLS** - for each HTTPS service, its certificate (subject, issuer, validity,
   the names it covers, self-signed or not) and whether it still accepts TLS 1.0
   or 1.1, found with a ClientHello offering only that version.
+- **Headers** - for each endpoint, its security headers (HSTS, CSP, framing
+  protection, `nosniff`, CORS) and the flags on any cookie it sets.
 - **Greetings** - what each service says first on connect, such as SSH's or
   MySQL's version line. It only listens; nothing is sent.
 - **Posture** - for each endpoint it checks whether it is reachable **without
@@ -147,10 +149,12 @@ Findings are prioritized by potential impact:
   `/metrics`, `/.env`, `/.git/HEAD`), or an exposed high-risk service (Redis,
   MongoDB, a database, the Docker API, etcd, kubelet, ...).
 - **MEDIUM** - exposed services like RDP, VNC, SMB, FTP, or message brokers; an
-  expired TLS certificate; TLS 1.0 or 1.1 still accepted.
+  expired TLS certificate; TLS 1.0 or 1.1 still accepted; CORS allowing any
+  origin with credentials.
 - **LOW** - cleartext HTTP carrying open endpoints; open API surfaces with no
   rate-limit headers; no throttling observed under an opt-in burst; a
-  self-signed certificate, or one expiring within 30 days.
+  self-signed certificate, or one expiring within 30 days; HTTPS without HSTS,
+  pages without CSP or framing protection, cookies missing their flags.
 - **INFO** - positive signals, e.g. a sensitive path that is correctly behind auth.
 
 portscan reports *exposure and posture*, never intent - it can't know whether a given
