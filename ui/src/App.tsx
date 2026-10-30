@@ -1,30 +1,24 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
-import { flushSync } from "react-dom";
 import { api } from "./api";
-import { Icon } from "./Icon";
-import { ScanView } from "./ScanView";
-import type { Report, ScanRow } from "./types";
+import { Docs } from "./Docs";
+import { Icon, type IconName } from "./Icon";
+import { go, href, readHash, type Page } from "./route";
+import { results, ScanView, SEVERITY } from "./ScanView";
+import type { Progress, Report, ScanRow, Severity } from "./types";
 
-// The scan shown is the one named in the URL hash, `#/<id>`, and the port
-// open in it, `#/<id>/<port>`; with none, the page is just the search bar.
-function readHash() {
-  const [id = "", port = ""] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
-  return { id, port: Number(port) || null };
-}
-
-function go(id: string, port?: number | null) {
-  location.hash = id ? "/" + encodeURIComponent(id) + (port ? "/" + port : "") : "";
-}
-
+// App is the frame every page sits in: a header with the search bar, help
+// and the theme, a sidebar of pages, and the page itself.
 export function App() {
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [route, setRoute] = useState(readHash);
-  const { id, port } = route;
+  const { id, docs, page, port } = route;
   const [problem, setProblem] = useState("");
   const [toast, setToast] = useState("");
-  const shown = useRef(id);
-  shown.current = id;
+  const [drawer, setDrawer] = useState(false);
+  // The last progress seen of each scan keeps its ports on screen between
+  // it finishing and its report arriving.
+  const last = useRef<Record<string, Progress>>({});
 
   const load = useCallback(async () => {
     try {
@@ -43,15 +37,10 @@ export function App() {
     return () => clearInterval(t);
   }, [load, going]);
 
-  // Between the empty page and a scan, the search bar glides from the
-  // middle of the page into the header.
   useEffect(() => {
     const onHash = () => {
-      const next = readHash();
-      const swap = () => flushSync(() => setRoute(next));
-      const glide = !next.id !== !shown.current && "startViewTransition" in document && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (glide) document.startViewTransition(swap);
-      else swap();
+      setRoute(readHash());
+      setDrawer(false);
     };
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
@@ -77,6 +66,16 @@ export function App() {
       .catch((e) => setToast((e as Error).message));
   }, [doneId, reports]);
 
+  if (selected?.progress) last.current[selected.id] = selected.progress;
+  const progress = selected && (selected.progress ?? last.current[selected.id]);
+  const items = selected ? results(selected, reports[selected.id], progress) : null;
+  const found = items?.flatMap((i) => (i.found ? [i.found] : [])) ?? [];
+  const counts: Record<Page, number | undefined> = {
+    ports: items?.length,
+    endpoints: items ? found.reduce((n, f) => n + f.endpoints.length, 0) : undefined,
+    findings: items ? found.reduce((n, f) => n + f.findings.length, 0) : undefined,
+  };
+
   const start = async (command: string) => {
     try {
       const row = await api.start(command);
@@ -97,34 +96,186 @@ export function App() {
     }
   };
 
-  const bar = <ScanBar scans={scans} onScan={start} />;
   return (
     <div className="app">
-      {id ? (
-        <>
-          <header className="header">
-            <a className="brand" href="#/"><Icon name="lan" size={22} /><span>portscan</span></a>
-            {bar}
-          </header>
-          <main className="page" key={id}>
-            {selected && (
-              <ScanView scan={selected} report={reports[selected.id]} port={port} onPort={(p) => go(selected.id, p)} onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
-            )}
-          </main>
-        </>
-      ) : (
-        <main className="home">
-          <h1 className="wordmark"><Icon name="lan" size={30} /><span>portscan</span></h1>
-          {bar}
-          {problem && !scans && (
-            <div className="callout bad"><Icon name="error" /><span>Can't reach portscan: {problem}</span></div>
+      <header className="header">
+        <button type="button" className="icon-btn menu-btn" aria-label="Menu" aria-expanded={drawer} onClick={() => setDrawer((d) => !d)}>
+          <Icon name="menu" />
+        </button>
+        <a className="brand" href="#/"><Icon name="lan" size={24} /><span>portscan</span></a>
+        <ScanBar scans={scans} onScan={start} />
+        <div className="header-actions">
+          <a className={"icon-btn" + (docs ? " on" : "")} href="#/docs" aria-label="Help" title="Help"><Icon name="help" /></a>
+          <ThemeMenu />
+        </div>
+      </header>
+
+      <div className="shell">
+        <nav className={"sidebar" + (drawer ? " open" : "")} aria-label="Pages">
+          <NavItem to="#/" icon="history" label="Scans" on={!id && !docs} />
+          {selected && (
+            <div className="nav-group">
+              <div className="nav-head" title={selected.target}><Mark scan={selected} /><span>{selected.target}</span></div>
+              {PAGES.map(([key, label, icon]) => (
+                <NavItem key={key} to={href(selected.id, key)} icon={icon} label={label} on={page === key} count={counts[key]} />
+              ))}
+            </div>
           )}
-          <p className="home-note">Scan only hosts you own or are allowed to test.</p>
+        </nav>
+        {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
+
+        <main className="page" key={docs ? "docs" : id + page}>
+          {docs && <Docs />}
+          {!docs && selected && (
+            <ScanView scan={selected} items={items} progress={progress} page={page} port={port}
+              onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
+          )}
+          {!docs && !id && <Home scans={scans} problem={problem} onScan={start} />}
         </main>
-      )}
+      </div>
 
       {toast && (
         <div className="toast bad" role="alert"><Icon name="error" /><span>{toast}</span></div>
+      )}
+    </div>
+  );
+}
+
+const PAGES: [Page, string, IconName][] = [["ports", "Ports", "router"], ["endpoints", "Endpoints", "link"], ["findings", "Findings", "shield"]];
+
+function NavItem({ to, icon, label, on, count }: { to: string; icon: IconName; label: string; on: boolean; count?: number }) {
+  return (
+    <a className={"nav-item" + (on ? " on" : "")} href={to} aria-current={on ? "page" : undefined}>
+      <Icon name={icon} />
+      <span className="nav-label">{label}</span>
+      {count !== undefined && <span className="nav-count">{count}</span>}
+    </a>
+  );
+}
+
+// Home is the scans kept, newest first, each opening its own pages.
+function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: string; onScan: (command: string) => Promise<void> }) {
+  return (
+    <>
+      <h1 className="page-title">Scans</h1>
+      {problem && !scans && (
+        <div className="callout bad"><Icon name="error" /><span>Can't reach portscan: {problem}</span></div>
+      )}
+      {scans && scans.length === 0 && (
+        <div className="panel welcome">
+          <Icon name="lan" size={40} />
+          <h2>No scans yet</h2>
+          <p className="muted">Type a host into the search bar, such as <code>192.168.1.10</code> or <code>api.internal:8080</code>, and press Enter.</p>
+          <button type="button" className="btn primary" onClick={() => onScan("@")}>Scan this computer</button>
+        </div>
+      )}
+      {scans && scans.length > 0 && (
+        <div className="panel">
+          <div className="table-wrap">
+            <table className="table rows">
+              <thead><tr><th aria-label="Status" /><th className="grow">Target</th><th>Open ports</th><th>Endpoints</th><th>Findings</th><th>Started</th></tr></thead>
+              <tbody>
+                {scans.map((s) => (
+                  <tr key={s.id} onClick={() => go(s.id)}>
+                    <td><Mark scan={s} /></td>
+                    <td><a href={href(s.id)}>{s.command.replace(/^@\s*/, "") || s.target}</a></td>
+                    {s.status === "done" ? (
+                      <>
+                        <td>{s.open_ports}</td>
+                        <td>{s.endpoints}</td>
+                        <td><Severities counts={s.findings} /></td>
+                      </>
+                    ) : (
+                      <td colSpan={3} className="muted">{s.status === "failed" ? "Failed" : s.status === "queued" ? "Queued" : "Scanning"}</td>
+                    )}
+                    <td className="muted">{ago(s.created)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      <p className="page-note">Scan only hosts you own or are allowed to test.</p>
+    </>
+  );
+}
+
+function Severities({ counts }: { counts: Record<Severity, number> }) {
+  const shown = (["high", "medium", "low"] as const).filter((s) => counts[s] > 0);
+  if (!shown.length) return <span className="muted">None</span>;
+  return (
+    <span className="chips">
+      {shown.map((s) => <span key={s} className={"chip " + SEVERITY[s]}>{counts[s]} {s}</span>)}
+    </span>
+  );
+}
+
+type Theme = "system" | "light" | "dark";
+const THEMES: [Theme, string, IconName][] = [["system", "System", "brightness_auto"], ["light", "Light", "light_mode"], ["dark", "Dark", "dark_mode"]];
+
+// ThemeMenu picks light, dark, or whatever the system is set to. The choice
+// is kept in this browser; index.html applies it before the page draws.
+function ThemeMenu() {
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const t = localStorage.getItem("theme");
+      return t === "light" || t === "dark" ? t : "system";
+    } catch {
+      return "system";
+    }
+  });
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "system") delete root.dataset.theme;
+    else root.dataset.theme = theme;
+    try {
+      if (theme === "system") localStorage.removeItem("theme");
+      else localStorage.setItem("theme", theme);
+    } catch {
+      // Not kept, still applied.
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  const [, , icon] = THEMES.find(([key]) => key === theme)!;
+  return (
+    <div className="menu-wrap" ref={box}>
+      <button type="button" className="icon-btn" aria-label="Theme" title="Theme" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name={icon} />
+      </button>
+      {open && (
+        <div className="menu" role="menu" aria-label="Theme">
+          {THEMES.map(([key, label, ic]) => (
+            <button key={key} type="button" role="menuitemradio" aria-checked={theme === key} className="menu-item"
+              onClick={() => {
+                setTheme(key);
+                setOpen(false);
+              }}>
+              <Icon name={ic} />
+              <span>{label}</span>
+              {theme === key && <Icon name="check" size={18} className="menu-check" />}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
