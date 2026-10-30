@@ -128,6 +128,7 @@ export function App() {
                   {isRange(selected)
                     ? <NavItem to={href(selected.id)} icon="devices" label="Hosts" on={page === "findings"} />
                     : <NavItem to={href(selected.id)} icon="shield" label="Findings" on={page === "findings"} />}
+                  <NavItem to={href(selected.id, "history")} icon="history" label="History" on={page === "history"} />
                   <NavItem to={href(selected.id, "changes")} icon="difference" label="Changes" on={page === "changes"} />
                 </>
               )}
@@ -144,6 +145,7 @@ export function App() {
           {view === "scan" && selected && (
             <ScanView scan={selected} report={reports[selected.id]} items={items} progress={progress} page={page} port={port}
               previous={before && { scan: before, report: reports[before.id] }}
+              history={(scans ?? []).filter((s) => s.target === selected.target)}
               onAgain={() => start(selected.command || selected.target, true)} onScan={start} onDelete={() => remove(selected)} />
           )}
           {view === "scans" && <Home scans={scans} problem={problem} onScan={start} />}

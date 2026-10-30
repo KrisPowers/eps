@@ -26,7 +26,7 @@ export interface Previous {
 // ScanView is a scan: its findings, one result per open port, worst first,
 // or, with a port picked, that port's own page, or what changed since the
 // scan before it.
-export function ScanView({ scan, report, items, progress: p, page, port, previous, onAgain, onScan, onDelete }: {
+export function ScanView({ scan, report, items, progress: p, page, port, previous, history, onAgain, onScan, onDelete }: {
   scan: ScanRow;
   report?: Report;
   items: Item[] | null;
@@ -34,6 +34,8 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
   page: Page;
   port: number | null;
   previous?: Previous;
+  // Every kept scan of the same target, newest first.
+  history: ScanRow[];
   onAgain: () => void;
   onScan: (command: string) => void;
   onDelete: () => void;
@@ -70,6 +72,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
       )}
       {page === "changes"
         ? <Changes scan={scan} report={report} previous={previous} />
+        : page === "history" ? <History scan={scan} history={history} />
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -271,6 +274,60 @@ function HostList({ hosts, onScan }: { hosts: Host[]; onScan?: (command: string)
         </li>
       ))}
     </ul>
+  );
+}
+
+// History is every kept scan of the same target: a bar per finished scan of
+// what it found, oldest to newest, then a row per scan, newest first, each
+// opening that scan.
+function History({ scan, history }: { scan: ScanRow; history: ScanRow[] }) {
+  const done = history.filter((s) => s.status === "done");
+  const serious = (s: ScanRow) => s.findings.high + s.findings.medium + s.findings.low;
+  const most = Math.max(1, ...done.map(serious));
+  const when = (s: ScanRow) => new Date(s.created).toLocaleString();
+  return (
+    <div className="stack">
+      {done.length > 1 && (
+        <Card title="Findings over time" sub={`High, medium and low, across ${done.length} finished scans`}>
+          <div className="trend">
+            {[...done].reverse().map((s) => (
+              <a key={s.id} className={"trend-bar" + (s.id === scan.id ? " on" : "")} href={href(s.id, "history")}
+                title={`${when(s)}: ${s.findings.high} high, ${s.findings.medium} medium, ${s.findings.low} low`}>
+                <span className="trend-stack" style={{ height: `${(serious(s) / most) * 100}%` }}>
+                  {LEVELS.slice(0, 3).map((l) => s.findings[l] > 0 && <span key={l} className={SEVERITY[l]} style={{ flexGrow: s.findings[l] }} />)}
+                </span>
+                <span className="trend-label">{new Date(s.created).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
+      <Card title="Scans" sub={`${history.length} kept of ${scan.target}`}>
+        <ul className="results">
+          {history.map((s) => (
+            <li key={s.id}>
+              <a className={"result history-row" + (s.id === scan.id ? " on" : "")} href={href(s.id)}>
+                <span>{when(s)}</span>
+                {s.status === "done" ? (
+                  <>
+                    <span className="result-meta">{plural(s.open_ports, "open port")}</span>
+                    <span className="result-meta">{plural(s.endpoints, "endpoint")}</span>
+                    <span className="chips">
+                      {LEVELS.slice(0, 3).some((l) => s.findings[l] > 0)
+                        ? LEVELS.slice(0, 3).map((l) => s.findings[l] > 0 && <span key={l} className={"chip " + SEVERITY[l]}>{s.findings[l]} {l}</span>)
+                        : <span className="muted">Nothing serious</span>}
+                    </span>
+                  </>
+                ) : (
+                  <span className="muted history-status">{s.status === "failed" ? "Failed" : s.status === "queued" ? "Queued" : "Scanning"}</span>
+                )}
+                <Icon name="chevron_right" className="result-go" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
   );
 }
 

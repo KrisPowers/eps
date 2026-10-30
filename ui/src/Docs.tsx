@@ -72,6 +72,7 @@ export function Docs() {
         <p>A port's results show as soon as it is done, while the rest are still being checked. Services that speak first on connect, such as SSH, FTP, SMTP and MySQL, show what they said under their name, often their version.</p>
         <p>An HTTPS port's page shows its certificate: who it names, who issued it, the dates it is good for and the names it covers, and whether the port still accepts TLS 1.0 or 1.1.</p>
         <p>A range opens on its <b>Hosts</b>: each host that answered, with its open ports. <b>Scan host</b> scans one of them in full.</p>
+        <p><b>History</b> lists every kept scan of the same target, with a bar per finished scan of what it found, so a trend shows at a glance.</p>
         <p><b>Changes</b> compares a finished scan with the last finished scan of the same target: ports that opened or closed, findings that are new or resolved.</p>
         <p><b>Export</b> downloads a finished scan as JSON, the same report <code>--json</code> prints; Markdown, to paste into a ticket; or SARIF, for code-scanning tools such as GitHub's.</p>
       </section>
