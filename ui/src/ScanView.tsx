@@ -90,7 +90,7 @@ function Facts({ scan, items, progress: p }: { scan: ScanRow; items: Item[] | nu
 }
 
 // Stage is the sweep: skeleton rows for the ports to come and, in the middle
-// of them, the port being scanned in a pill above the loading bar.
+// of them, the port being scanned in a pill that shines with them.
 function Stage({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
   const sweep = p?.phase === "ports" ? p : undefined;
   const pct = sweep?.ports_total ? (sweep.ports_done / sweep.ports_total) * 100 : 0;
@@ -105,7 +105,6 @@ function Stage({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
         {sweep ? (
           <div className="sweep" role="progressbar" aria-label="Ports scanned" aria-valuenow={Math.floor(pct)} aria-valuemin={0} aria-valuemax={100}>
             <span className="sweep-pill"><Ticker value={String(sweep.port || "…")} /></span>
-            <div className="bar"><div style={{ width: pct + "%" }} /></div>
           </div>
         ) : (
           <div className="stage-label">{p?.phase === "resolving" ? <>Resolving <b>{scan.target}</b></> : "Waiting for a free slot"}</div>
