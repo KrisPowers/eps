@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { ApiDetail, Apis, Changes, Dns, DnsDetail, History, live, TechDetail, Technologies } from "./Pages";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
 import { Icon } from "./Icon";
@@ -26,13 +27,15 @@ export interface Previous {
 // ScanView is a scan: its findings, one result per open port, worst first,
 // or, with a port picked, that port's own page, or what changed since the
 // scan before it.
-export function ScanView({ scan, report, items, progress: p, page, port, previous, history, onAgain, onScan, onDelete }: {
+export function ScanView({ scan, report, items, progress: p, page, port, item, previous, history, onAgain, onScan, onDelete }: {
   scan: ScanRow;
   report?: Report;
   items: Item[] | null;
   progress?: Progress;
   page: Page;
   port: number | null;
+  // One thing on the page, such as a technology.
+  item: string | null;
   previous?: Previous;
   // Every kept scan of the same target, newest first.
   history: ScanRow[];
@@ -44,6 +47,8 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
   const open = items?.find((i) => i.port === port);
   const going = scan.status === "queued" || scan.status === "running";
   const ip = scan.resolved_ip ?? p?.ip;
+  const found = live(scan, report, p);
+  const host = scan.target.split(":")[0];
   return (
     <>
       <div className="page-head">
@@ -69,14 +74,13 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
         <div className="callout bad"><Icon name="error" /><span>{scan.error ?? "The scan failed."}</span></div>
       )}
       {/* The heading above stays put; only what's under it changes from page to page. */}
-      <div className="page-body" key={page + "/" + (port ?? "")}>
+      <div className="page-body" key={page + "/" + (port ?? "") + "/" + (item ?? "")}>
       {open && items ? <Detail id={scan.id} item={open} items={sorted(items)} />
-        : page === "changes"
-        ? <Changes scan={scan} report={report} previous={previous} />
-        : page === "history" ? <History scan={scan} history={history} />
-        : page === "tech" ? <Later scan={scan} ready={report}>{(r) => <Technologies id={scan.id} report={r} />}</Later>
-        : page === "api" ? <Later scan={scan} ready={report}>{(r) => <Apis report={r} />}</Later>
-        : page === "dns" ? <Later scan={scan} ready={report}>{(r) => <Dns host={scan.target.split(":")[0]} report={r} />}</Later>
+        : page === "changes" ? <Changes scan={scan} live={found} previous={previous} />
+        : page === "history" ? <History scan={scan} live={found} history={history} />
+        : page === "tech" ? (item ? <TechDetail id={scan.id} live={found} name={item} /> : <Technologies id={scan.id} live={found} />)
+        : page === "api" ? (item ? <ApiDetail id={scan.id} live={found} index={item} /> : <Apis id={scan.id} live={found} />)
+        : page === "dns" ? (item ? <DnsDetail id={scan.id} live={found} kind={item} /> : <Dns id={scan.id} host={host} live={found} />)
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -165,75 +169,6 @@ function Export({ report, when }: { report?: Report; when: number }) {
   );
 }
 
-// Changes is what differs from the last finished scan of the same target:
-// ports that opened or closed, findings that are new or gone.
-function Changes({ scan, report, previous }: { scan: ScanRow; report?: Report; previous?: Previous }) {
-  if (scan.status !== "done") return <div className="card empty">Changes show once the scan finishes</div>;
-  if (!previous) return <div className="card empty">No earlier scan of {scan.target} to compare with</div>;
-  if (!report || !previous.report) return <Loading />;
-  const before = previous.report;
-  const ports = (r: Report) => new Set(r.open_ports.map((o) => o.port));
-  const key = (f: Finding) => f.severity + "|" + f.title + "|" + f.location;
-  const keys = (r: Report) => new Set(r.findings.map(key));
-  const opened = report.open_ports.filter((o) => !ports(before).has(o.port));
-  const closed = before.open_ports.filter((o) => !ports(report).has(o.port));
-  const ips = (r: Report) => new Set((r.hosts ?? []).map((h) => h.ip));
-  const up = (report.hosts ?? []).filter((h) => !ips(before).has(h.ip));
-  const down = (before.hosts ?? []).filter((h) => !ips(report).has(h.ip));
-  const range = isRange(scan);
-  const added = report.findings.filter((f) => !keys(before).has(key(f)));
-  const gone = before.findings.filter((f) => !keys(report).has(key(f)));
-  const portList = (id: string, list: Port[]) => (
-    <ul className="results">
-      {list.map((o) => (
-        <li key={o.port}>
-          <a className="result" href={href(id, o.port)}>
-            <span className="port-num">{o.port}<small>/tcp</small></span>
-            <span className="result-service">{o.service}</span>
-            <span /><span />
-            <Icon name="chevron_right" className="result-go" />
-          </a>
-        </li>
-      ))}
-    </ul>
-  );
-  const findingList = (list: Finding[]) => (
-    <ul className="findings">{list.map((f, k) => <FindingRow key={k} finding={f} at />)}</ul>
-  );
-  return (
-    <>
-      <p className="lede">Compared with <a href={href(previous.scan.id)}>the scan from {new Date(previous.scan.created).toLocaleString()}</a></p>
-      <div className="tally four">
-        {range ? (
-          <>
-            <div className="tally-item bad"><b>{up.length}</b><span>New hosts</span></div>
-            <div className="tally-item ok"><b>{down.length}</b><span>Hosts gone</span></div>
-          </>
-        ) : (
-          <>
-            <div className="tally-item bad"><b>{opened.length}</b><span>Ports opened</span></div>
-            <div className="tally-item ok"><b>{closed.length}</b><span>Ports closed</span></div>
-          </>
-        )}
-        <div className="tally-item warn"><b>{added.length}</b><span>New findings</span></div>
-        <div className="tally-item ok"><b>{gone.length}</b><span>Resolved findings</span></div>
-      </div>
-      {opened.length + closed.length + up.length + down.length + added.length + gone.length === 0 ? (
-        <div className="card empty">Nothing changed</div>
-      ) : (
-        <div className="stack">
-          {up.length > 0 && <Card title="New hosts" sub={plural(up.length, "host")}><HostList hosts={up} /></Card>}
-          {down.length > 0 && <Card title="Hosts gone" sub={plural(down.length, "host")}><HostList hosts={down} /></Card>}
-          {opened.length > 0 && <Card title="Ports opened" sub={plural(opened.length, "port")}>{portList(scan.id, opened)}</Card>}
-          {closed.length > 0 && <Card title="Ports closed" sub={plural(closed.length, "port")}>{portList(previous.scan.id, closed)}</Card>}
-          {added.length > 0 && <Card title="New findings" sub={plural(added.length, "finding")}>{findingList(added)}</Card>}
-          {gone.length > 0 && <Card title="Resolved findings" sub={plural(gone.length, "finding")}>{findingList(gone)}</Card>}
-        </div>
-      )}
-    </>
-  );
-}
-
 // isRange is whether a scan covers a range of addresses, `10.0.0.0/24`,
 // rather than one host.
 export function isRange(scan: ScanRow) {
@@ -266,7 +201,7 @@ function Hosts({ report, onScan }: { report: Report; onScan: (command: string) =
   );
 }
 
-function HostList({ hosts, onScan }: { hosts: Host[]; onScan?: (command: string) => void }) {
+export function HostList({ hosts, onScan }: { hosts: Host[]; onScan?: (command: string) => void }) {
   return (
     <ul className="card results">
       {hosts.map((h) => (
@@ -279,190 +214,6 @@ function HostList({ hosts, onScan }: { hosts: Host[]; onScan?: (command: string)
         </li>
       ))}
     </ul>
-  );
-}
-
-// Later holds a page that needs the finished report: the sweep while the
-// scan runs, then the page.
-function Later({ scan, ready, children }: { scan: ScanRow; ready?: Report; children: (report: Report) => ReactNode }) {
-  if (ready) return <>{children(ready)}</>;
-  if (scan.status === "failed") return null;
-  if (scan.status === "done") return <Loading />;
-  return <div className="card empty">Shows once the scan finishes</div>;
-}
-
-// Technologies is the software recognized on the open ports, a card per
-// sort of thing: web servers, languages, frameworks, databases, ...
-function Technologies({ id, report }: { id: string; report: Report }) {
-  const all = report.technologies ?? [];
-  if (!all.length) return <div className="card empty">Nothing recognized. Servers that don't name themselves show nothing here.</div>;
-  const kinds = [...new Set(all.map((t) => t.kind))];
-  return (
-    <div className="stack">
-      {kinds.map((kind) => {
-        const these = all.filter((t) => t.kind === kind);
-        return (
-          <Card key={kind} title={kind} sub={`${these.length} found`}>
-            <ul className="results">
-              {these.map((t) => (
-                <li key={t.port + t.name}>
-                  <a className="result tech-row" href={href(id, t.port)}>
-                    <span className="tech-name">{t.name}{t.version && <span className="port-chip">{t.version}</span>}</span>
-                    <span className="port-num">{t.port}<small>/tcp</small></span>
-                    <span className="result-meta">{t.evidence}</span>
-                    <Icon name="chevron_right" className="result-go" />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-// Apis is every API document the scan found served without auth: what it
-// is and the security it defines, then each operation it lists, with the
-// ones that change data and declare no security marked.
-function Apis({ report }: { report: Report }) {
-  const all = report.apis ?? [];
-  if (!all.length) return <div className="card empty">No OpenAPI or Swagger document found served without auth</div>;
-  return (
-    <div className="stack">
-      {all.map((a) => {
-        const open = a.operations.filter((o) => !o.secured && ["POST", "PUT", "PATCH", "DELETE"].includes(o.method));
-        return (
-          <Card key={a.url} title={`${a.title || "Untitled API"} ${a.version}`}
-            sub={<>{a.spec} at <code>{a.url}</code></>}
-            action={open.length > 0 && <span className="chip warn">{open.length} write {open.length === 1 ? "operation" : "operations"} without auth</span>}>
-            <dl className="facts-list">
-              <dt>Security</dt>
-              <dd>{a.schemes.length ? a.schemes.map((s) => <span key={s} className="port-chip">{s}</span>) : <span className="chip warn">None defined</span>}</dd>
-            </dl>
-            <div className="table-wrap">
-              <table className="table">
-                <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th className="grow">Summary</th></tr></thead>
-                <tbody>
-                  {a.operations.map((o) => (
-                    <tr key={o.method + o.path}>
-                      <td><span className={"method " + o.method.toLowerCase()}>{o.method}</span></td>
-                      <td className="mono">{o.path}</td>
-                      <td>{o.secured ? <span className="chip ok">Required</span> : <span className={"chip " + (open.includes(o) ? "warn" : "plain")}>None</span>}</td>
-                      <td className="muted">{o.summary}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-// Dns is the target's DNS records: its mail protection at a glance, SPF
-// and DMARC, then every record by kind.
-function Dns({ host, report }: { host: string; report: Report }) {
-  const all = report.dns ?? [];
-  if (!all.length) return <div className="card empty">No DNS records. An address gets only its reverse name, and a resolver is needed to ask.</div>;
-  const txt = (name: string, prefix: string) => all.find((r) => r.kind === "TXT" && r.name.toLowerCase() === name.toLowerCase() && r.value.startsWith(prefix));
-  const mail = all.some((r) => r.kind === "MX");
-  const spf = txt(host, "v=spf1");
-  const dmarc = txt("_dmarc." + host, "v=DMARC1");
-  const kinds = [...new Set(all.map((r) => r.kind))];
-  // Its findings name no port, so they show here rather than on Findings.
-  const notes = report.findings.filter((f) => f.location.startsWith("dns "));
-  return (
-    <div className="stack">
-      {notes.length > 0 && (
-        <Card title="Findings" sub={plural(notes.length, "finding")}>
-          <ul className="findings">{notes.map((f, k) => <FindingRow key={k} finding={f} />)}</ul>
-        </Card>
-      )}
-      {mail && (
-        <Card title="Mail" sub="Who may send as this domain, and what receivers do with mail that fails">
-          <dl className="facts-list">
-            <dt>SPF</dt>
-            <dd>{spf ? <code className="command-line">{spf.value}</code> : <span className="chip warn">None</span>}</dd>
-            <dt>DMARC</dt>
-            <dd>{dmarc ? <code className="command-line">{dmarc.value}</code> : <span className="chip warn">None</span>}</dd>
-          </dl>
-        </Card>
-      )}
-      <Card title="Records" sub={plural(all.length, "record")}>
-        <div className="table-wrap">
-          <table className="table">
-            <thead><tr><th>Type</th><th>Name</th><th className="grow">Value</th><th>TTL</th></tr></thead>
-            <tbody>
-              {kinds.flatMap((k) => all.filter((r) => r.kind === k)).map((r, i) => (
-                <tr key={i}>
-                  <td><span className="method">{r.kind}</span></td>
-                  <td className="mono">{r.name}</td>
-                  <td className="mono wrap">{r.value}</td>
-                  <td className="muted">{r.ttl}s</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// History is every kept scan of the same target: a bar per finished scan of
-// what it found, oldest to newest, then a row per scan, newest first, each
-// opening that scan.
-function History({ scan, history }: { scan: ScanRow; history: ScanRow[] }) {
-  const done = history.filter((s) => s.status === "done");
-  const serious = (s: ScanRow) => s.findings.high + s.findings.medium + s.findings.low;
-  const most = Math.max(1, ...done.map(serious));
-  const when = (s: ScanRow) => new Date(s.created).toLocaleString();
-  return (
-    <div className="stack">
-      {done.length > 1 && (
-        <Card title="Findings over time" sub={`High, medium and low, across ${done.length} finished scans`}>
-          <div className="trend">
-            {[...done].reverse().map((s) => (
-              <a key={s.id} className={"trend-bar" + (s.id === scan.id ? " on" : "")} href={href(s.id, "history")}
-                title={`${when(s)}: ${s.findings.high} high, ${s.findings.medium} medium, ${s.findings.low} low`}>
-                <span className="trend-stack" style={{ height: `${(serious(s) / most) * 100}%` }}>
-                  {LEVELS.slice(0, 3).map((l) => s.findings[l] > 0 && <span key={l} className={SEVERITY[l]} style={{ flexGrow: s.findings[l] }} />)}
-                </span>
-                <span className="trend-label">{new Date(s.created).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-              </a>
-            ))}
-          </div>
-        </Card>
-      )}
-      <Card title="Scans" sub={`${history.length} kept of ${scan.target}`}>
-        <ul className="results">
-          {history.map((s) => (
-            <li key={s.id}>
-              <a className={"result history-row" + (s.id === scan.id ? " on" : "")} href={href(s.id)}>
-                <span>{when(s)}</span>
-                {s.status === "done" ? (
-                  <>
-                    <span className="result-meta">{plural(s.open_ports, "open port")}</span>
-                    <span className="result-meta">{plural(s.endpoints, "endpoint")}</span>
-                    <span className="chips">
-                      {LEVELS.slice(0, 3).some((l) => s.findings[l] > 0)
-                        ? LEVELS.slice(0, 3).map((l) => s.findings[l] > 0 && <span key={l} className={"chip " + SEVERITY[l]}>{s.findings[l]} {l}</span>)
-                        : <span className="muted">Nothing serious</span>}
-                    </span>
-                  </>
-                ) : (
-                  <span className="muted history-status">{s.status === "failed" ? "Failed" : s.status === "queued" ? "Queued" : "Scanning"}</span>
-                )}
-                <Icon name="chevron_right" className="result-go" />
-              </a>
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </div>
   );
 }
 
@@ -589,7 +340,7 @@ function Step({ id, to, label, icon }: { id: string; to?: Item; label: string; i
 
 // FindingRow is one finding; `at` names the port it is on as well as the
 // path, for a list that mixes ports.
-function FindingRow({ finding: f, at }: { finding: Finding; at?: boolean }) {
+export function FindingRow({ finding: f, at }: { finding: Finding; at?: boolean }) {
   const port = /(?:^|\()port (\d+)/.exec(f.location)?.[1];
   // A range's findings name their host before the port.
   const head = f.location.split(" (port ")[0];
@@ -703,20 +454,21 @@ function sorted(items: Item[]) {
   return [...items].sort((a, b) => rank(a) - rank(b) || a.port - b.port);
 }
 
-function plural(n: number, word: string) {
+export function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-function fromProgress(p: Progress): Item[] {
+export function fromProgress(p: Progress): Item[] {
   return p.open.map((o): Item => ({
     ...o,
+    tls: o.tls ?? o.found?.tls,
     state: o.found ? "done" : p.inspecting.includes(o.port) ? "checking" : "waiting",
   }));
 }
 
 // fromReport splits a finished report back into its ports, the same shape
 // the scan showed while it ran.
-function fromReport(r: Report): Item[] {
+export function fromReport(r: Report): Item[] {
   return r.open_ports.map((o): Item => ({
     ...o,
     state: "done",

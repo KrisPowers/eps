@@ -14,7 +14,7 @@ export function App() {
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [route, setRoute] = useState(readHash);
-  const { id, view, page, port, section } = route;
+  const { id, view, page, port, item, section } = route;
   const [problem, setProblem] = useState("");
   const [toast, setToast] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -60,10 +60,9 @@ export function App() {
   }, [scans, id, selected]);
 
   // The last finished scan of the same target before this one, which the
-  // Changes page compares with. The scans are newest first.
-  const before = selected?.status === "done"
-    ? scans?.find((s) => s.target === selected.target && s.status === "done" && s.created < selected.created)
-    : undefined;
+  // Changes page compares with, even while this one runs. The scans are
+  // newest first.
+  const before = selected && scans?.find((s) => s.target === selected.target && s.status === "done" && s.created < selected.created);
 
   // A finished scan's report, and the one before it, are fetched once and kept.
   const doneId = selected?.status === "done" ? selected.id : "";
@@ -158,7 +157,7 @@ export function App() {
           {view === "docs" && <Docs section={section} />}
           {view === "settings" && <Settings section={section} scans={scans} onChanged={load} />}
           {view === "scan" && selected && (
-            <ScanView scan={selected} report={reports[selected.id]} items={items} progress={progress} page={page} port={port}
+            <ScanView scan={selected} report={reports[selected.id]} items={items} progress={progress} page={page} port={port} item={item}
               previous={before && { scan: before, report: reports[before.id] }}
               history={(scans ?? []).filter((s) => s.target === selected.target)}
               onAgain={() => start(selected.command || selected.target, true)} onScan={start} onDelete={() => remove(selected)} />
