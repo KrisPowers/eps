@@ -2,7 +2,7 @@
    behind the header, the sidebar and the page, no lines between them, the
    search bar in the middle of the header, and content on soft filled cards.
    Light, dark, or the system's: every colour is a light-dark() pair, picked
-   by color-scheme, which the theme menu sets through data-theme. Every
+   by color-scheme, which Settings sets through data-theme. Every
    control is drawn here, none by the browser. */
 
 @font-face {
@@ -90,7 +90,7 @@ kbd {
    and the theme on the right. */
 .header {
   position: sticky; top: 0; z-index: 20; display: grid; align-items: center; gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 720px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 540px) minmax(0, 1fr);
   height: var(--head); padding: 0 16px 0 24px; background: var(--bg);
 }
 .header .menu-btn { display: none; }
@@ -122,12 +122,7 @@ kbd {
   color: var(--text-2); font-weight: 500; transition: background .12s, color .12s;
 }
 .nav-back:hover { background: var(--hover); color: var(--text); }
-.nav-group { margin-top: 16px; animation: fade .2s ease-out both; }
-.nav-head {
-  display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 16px;
-  font-size: 12px; font-weight: 500; color: var(--text-2);
-}
-.nav-head > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-rule { height: 1px; margin: 8px 16px; border: 0; background: var(--line); }
 .scrim { display: none; }
 
 .page { min-width: 0; width: 100%; max-width: 1280px; margin: 0 auto; padding: 16px 32px 56px; animation: rise .3s var(--ease) both; }
@@ -170,22 +165,6 @@ kbd {
 .recent-item > .icon { color: var(--text-2); }
 .recent-target { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-when { font-size: 12px; color: var(--text-3); white-space: nowrap; }
-
-/* The theme menu, under its button. */
-.menu-wrap { position: relative; }
-.menu {
-  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 180px; padding: 8px 0;
-  background: var(--raised); border-radius: var(--round); box-shadow: var(--shadow);
-  transform-origin: top right; animation: drop .14s ease-out both;
-}
-.menu-item {
-  display: flex; align-items: center; gap: 14px; width: 100%; height: 40px; padding: 0 16px;
-  border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
-}
-.menu-item .icon { color: var(--text-2); }
-.menu-item:hover { background: var(--hover); }
-.menu-item span { flex: 1; }
-.menu-item .menu-check { color: var(--accent); }
 
 /* ---- buttons ---- */
 .btn {
@@ -373,6 +352,16 @@ a.result:hover { background: var(--hover); }
 .skeleton .bone { width: 100%; height: 12px; }
 .skeleton .bone:nth-child(3n + 2) { width: 72%; }
 @keyframes shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* ---- settings ---- */
+.choices { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 24px 24px; }
+.choice {
+  display: grid; justify-items: center; gap: 8px; width: 132px; padding: 18px 12px 14px; border: 0; border-radius: 12px;
+  background: var(--bg); color: var(--text-2); font: 500 14px var(--font); cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line); transition: box-shadow .12s, background .12s, color .12s;
+}
+.choice:hover { color: var(--text); background: var(--hover); }
+.choice[aria-checked="true"] { color: var(--on-accent-bg); background: var(--accent-bg); box-shadow: inset 0 0 0 2px var(--accent); }
 
 /* ---- docs ---- */
 .docs { max-width: 860px; display: grid; gap: 16px; }
