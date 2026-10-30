@@ -5,20 +5,22 @@ import { Icon } from "./Icon";
 import { ScanView } from "./ScanView";
 import type { Report, ScanRow } from "./types";
 
-// The scan shown is the one named in the URL hash, `#/<id>`; with none, the
-// page is just the search bar.
+// The scan shown is the one named in the URL hash, `#/<id>`, and the port
+// open in it, `#/<id>/<port>`; with none, the page is just the search bar.
 function readHash() {
-  return decodeURIComponent(location.hash.replace(/^#\/?/, ""));
+  const [id = "", port = ""] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  return { id, port: Number(port) || null };
 }
 
-function go(id: string) {
-  location.hash = id ? "/" + encodeURIComponent(id) : "";
+function go(id: string, port?: number | null) {
+  location.hash = id ? "/" + encodeURIComponent(id) + (port ? "/" + port : "") : "";
 }
 
 export function App() {
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [reports, setReports] = useState<Record<string, Report>>({});
-  const [id, setId] = useState(readHash);
+  const [route, setRoute] = useState(readHash);
+  const { id, port } = route;
   const [problem, setProblem] = useState("");
   const [toast, setToast] = useState("");
   const shown = useRef(id);
@@ -46,8 +48,8 @@ export function App() {
   useEffect(() => {
     const onHash = () => {
       const next = readHash();
-      const swap = () => flushSync(() => setId(next));
-      const glide = !next !== !shown.current && "startViewTransition" in document && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const swap = () => flushSync(() => setRoute(next));
+      const glide = !next.id !== !shown.current && "startViewTransition" in document && !matchMedia("(prefers-reduced-motion: reduce)").matches;
       if (glide) document.startViewTransition(swap);
       else swap();
     };
@@ -106,7 +108,7 @@ export function App() {
           </header>
           <main className="page" key={id}>
             {selected && (
-              <ScanView scan={selected} report={reports[selected.id]} onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
+              <ScanView scan={selected} report={reports[selected.id]} port={port} onPort={(p) => go(selected.id, p)} onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
             )}
           </main>
         </>

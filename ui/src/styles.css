@@ -207,48 +207,69 @@ b { font-weight: 500; }
 }
 .ghost { display: flex; align-items: center; gap: 28px; height: 56px; padding: 0 20px; border: 1px solid var(--line); border-radius: var(--round); }
 .ghost .bone:last-child { flex: 1; max-width: 320px; }
-.stage-center { position: relative; display: grid; justify-items: center; gap: 4px; width: min(380px, 100%); text-align: center; }
+.stage-center { position: relative; width: min(440px, 100%); text-align: center; }
 .stage-label { font-size: 13px; font-weight: 500; color: var(--text-2); }
-.stage-port { font: 500 60px/1.1 var(--mono); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-.stage-sub { font-size: 13px; color: var(--text-3); }
-.stage .bar { width: 100%; margin-top: 16px; }
-.stage-found { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 18px; }
-.stage-found .chip { animation: rise .3s var(--ease) both; }
+
+/* The port being scanned rides the bar, over the point it has reached. */
+.sweep { position: relative; padding-top: 42px; }
+.sweep-pill {
+  position: absolute; top: 0; transform: translateX(-50%); display: inline-grid; place-items: center;
+  min-width: 64px; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--primary); color: #fff;
+  font: 500 13px var(--mono); font-variant-numeric: tabular-nums; box-shadow: 0 4px 14px rgba(29, 99, 237, .35);
+  transition: left .7s linear;
+}
+.sweep-pill::after {
+  content: ""; position: absolute; left: 50%; bottom: -4px; width: 8px; height: 8px; border-radius: 1px;
+  background: inherit; transform: translateX(-50%) rotate(45deg);
+}
+.sweep .bar { height: 6px; border-radius: 3px; }
 
 .bar { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
 .bar > div { height: 100%; background: var(--primary); transition: width .7s linear; }
 
-/* Each open port, filled in once it's done. */
-.ports-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
-.ports-head h2 { font-size: 15px; font-weight: 500; }
-.legend { margin-left: auto; display: flex; flex-wrap: wrap; gap: 16px; }
-.ports { display: grid; gap: 10px; }
-.port {
-  border: 1px solid var(--line); border-radius: var(--round); background: var(--surface); overflow: hidden;
-  animation: rise .35s var(--ease) both; animation-delay: min(calc(var(--i, 0) * 40ms), 400ms);
-  transition: border-color .3s, background-color .3s;
+/* The catalog: one tile per open port. */
+.catalog { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.tile {
+  display: grid; gap: 6px; align-content: start; min-height: 112px; padding: 16px; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--round); background: var(--surface); color: var(--text);
+  font: inherit; cursor: pointer; animation: rise .35s var(--ease) both;
+  transition: border-color .15s, transform .15s var(--ease), box-shadow .15s;
 }
-.port.waiting { background: transparent; }
-.port.checking { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
-.port-head {
-  display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 0 16px 0 20px;
-  border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
-}
-.port-head:disabled { cursor: default; }
-.port-head:not(:disabled):hover { background: var(--row-hover); }
-.port.waiting .port-head { color: var(--text-3); }
-.port-num { min-width: 92px; font: 500 15px var(--mono); }
+.tile:hover { border-color: var(--line-strong); transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, .22); }
+.tile.waiting { background: transparent; color: var(--text-3); }
+.tile.checking { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-service { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.waiting .tile-service { color: inherit; }
+.tile-meta { margin-top: auto; font-size: 12px; color: var(--text-3); }
+.ghost-tile, .ghost-tile:hover { cursor: default; transform: none; box-shadow: none; border-color: var(--line); }
+.port-num { font: 500 17px var(--mono); }
 .port-num small { margin-left: 1px; font-size: 12px; font-weight: 400; color: var(--text-3); }
-.port-service { flex: 1; min-width: 0; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.port.waiting .port-service { color: inherit; }
-.port-state { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); white-space: nowrap; }
-.chev { color: var(--text-3); transition: transform .2s var(--ease); }
-.port-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
-.port-body { border-top: 1px solid var(--line); }
-.reveal { animation: rise .3s var(--ease) both; }
+
+/* One port's page: back, the port, a step either side, then its tabs. */
+.port-page { animation: rise .3s var(--ease) both; }
+.port-page-head { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 16px; }
+.btn.back { border-color: transparent; padding: 0 12px 0 8px; color: var(--text-2); }
+.btn.back:hover { color: var(--text); }
+.port-title { display: flex; align-items: baseline; gap: 12px; font-size: 15px; font-weight: 400; }
+.port-title .port-num { font-size: 20px; }
+.pager { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.pager-pos { min-width: 56px; font-size: 12px; color: var(--text-3); text-align: center; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab {
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; margin-bottom: -1px;
+  border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-2);
+  font: 500 14px var(--font); cursor: pointer;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.tab-count { display: inline-grid; place-items: center; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); font-size: 11px; }
+.panel { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--round); background: var(--surface); overflow: hidden; }
+.panel-note { padding: 16px 20px 0; font-size: 13px; color: var(--text-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
 
 .findings { list-style: none; margin: 0; padding: 6px 0; }
-.findings + .table-wrap { border-top: 1px solid var(--line); }
 .finding { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: start; gap: 4px 14px; padding: 10px 20px; }
 .finding .chip { justify-self: start; margin-top: 1px; }
 .finding-title { font-weight: 500; }
@@ -321,11 +342,9 @@ b { font-weight: 500; }
   .search input { padding-right: 16px; }
   .page { padding: 20px 16px 40px; }
   .home { padding-top: 18vh; }
-  .stage-port { font-size: 44px; }
   .finding { grid-template-columns: auto minmax(0, 1fr); }
   .finding-where { grid-column: 2; justify-self: start; }
-  .port-num { min-width: 0; }
-  .legend { margin-left: 0; }
+  .catalog { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }

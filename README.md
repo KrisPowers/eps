@@ -41,10 +41,10 @@ Then open <http://localhost:8090>. The search bar in the middle of the page is t
 `192.168.1.10:8080` or `api.internal --no-discovery --probe-rate-limit`, and press
 Enter. The CLI's options all work there except `--paths` and `--serve`; an empty
 line scans this computer. Focused, the bar lists your recent scans, narrowed to
-what you type. Once a scan starts, the bar moves into a header and the page shows
-the port the sweep has reached, then each open port, filled in with its findings
-and endpoints as soon as that port is done, each endpoint with the same verdict
-blocks as the CLI. The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,
+what you type. Once a scan starts, the bar moves into a header and the loading bar
+carries the port being scanned. Then the open ports show as a catalog of tiles,
+each opening the port's own page, with its findings and endpoints on tabs, as
+soon as that port is done; each endpoint has the same verdict blocks as the CLI. The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,
 `./portscan/data` next to `compose.yaml` elsewhere.
 
 - **This computer only.** The dashboard has no sign-in, so it's published on
