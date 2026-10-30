@@ -211,6 +211,8 @@ pub struct Endpoint {
     pub sensitive: bool,
     pub note: String,
     pub server: Option<String>,
+    /// `X-Powered-By`, which often names the language or framework.
+    pub powered_by: Option<String>,
     pub content_type: Option<String>,
     pub www_authenticate: Option<String>,
     pub location: Option<String>,
@@ -334,6 +336,7 @@ async fn inspect_path(
 
     let mut rate_limit = collect_rate_headers(&resp);
     let server = header_str(&resp, "server");
+    let powered_by = header_str(&resp, "x-powered-by");
     let content_type = header_str(&resp, "content-type");
     let www_authenticate = header_str(&resp, "www-authenticate");
     let location = header_str(&resp, "location");
@@ -354,6 +357,7 @@ async fn inspect_path(
         sensitive: spec.sensitive,
         note: spec.note.clone(),
         server,
+        powered_by,
         content_type,
         www_authenticate,
         location,

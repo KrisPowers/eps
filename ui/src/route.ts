@@ -2,7 +2,7 @@
 // docs, `#/settings` the settings, `#/<id>` a scan's findings, `#/<id>/<page>`
 // another page of it, and `#/<id>/<port>` one port of it.
 
-export type Page = "findings" | "history" | "changes";
+export type Page = "findings" | "tech" | "history" | "changes";
 
 export interface Route {
   id: string;
@@ -11,7 +11,7 @@ export interface Route {
   port: number | null;
 }
 
-const PAGES: Page[] = ["findings", "history", "changes"];
+const PAGES: Page[] = ["findings", "tech", "history", "changes"];
 
 export function readHash(): Route {
   const [first = "", rest = ""] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);

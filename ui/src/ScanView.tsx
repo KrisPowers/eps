@@ -73,6 +73,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
       {page === "changes"
         ? <Changes scan={scan} report={report} previous={previous} />
         : page === "history" ? <History scan={scan} history={history} />
+        : page === "tech" ? <Later scan={scan} ready={report}>{(r) => <Technologies id={scan.id} report={r} />}</Later>
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -274,6 +275,46 @@ function HostList({ hosts, onScan }: { hosts: Host[]; onScan?: (command: string)
         </li>
       ))}
     </ul>
+  );
+}
+
+// Later holds a page that needs the finished report: the sweep while the
+// scan runs, then the page.
+function Later({ scan, ready, children }: { scan: ScanRow; ready?: Report; children: (report: Report) => ReactNode }) {
+  if (ready) return <>{children(ready)}</>;
+  if (scan.status === "failed") return null;
+  if (scan.status === "done") return <Loading />;
+  return <div className="card empty">Shows once the scan finishes</div>;
+}
+
+// Technologies is the software recognized on the open ports, a card per
+// sort of thing: web servers, languages, frameworks, databases, ...
+function Technologies({ id, report }: { id: string; report: Report }) {
+  const all = report.technologies ?? [];
+  if (!all.length) return <div className="card empty">Nothing recognized. Servers that don't name themselves show nothing here.</div>;
+  const kinds = [...new Set(all.map((t) => t.kind))];
+  return (
+    <div className="stack">
+      {kinds.map((kind) => {
+        const these = all.filter((t) => t.kind === kind);
+        return (
+          <Card key={kind} title={kind} sub={`${these.length} found`}>
+            <ul className="results">
+              {these.map((t) => (
+                <li key={t.port + t.name}>
+                  <a className="result tech-row" href={href(id, t.port)}>
+                    <span className="tech-name">{t.name}{t.version && <span className="port-chip">{t.version}</span>}</span>
+                    <span className="port-num">{t.port}<small>/tcp</small></span>
+                    <span className="result-meta">{t.evidence}</span>
+                    <Icon name="chevron_right" className="result-go" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 

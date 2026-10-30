@@ -205,6 +205,7 @@ pub(crate) async fn scan_target(
     for p in &mut report.open_ports {
         p.banner = banners.get(&p.port).cloned();
     }
+    report.technologies = report::technologies(&report.open_ports, &services);
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {
         report,
