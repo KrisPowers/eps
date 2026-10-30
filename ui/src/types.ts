@@ -9,6 +9,13 @@ export type Posture = "configured" | "insecure" | "missing" | "unknown";
 export interface Port {
   port: number;
   service: string;
+  // While a scan runs: what the port exposes, once it is done.
+  found?: Found | null;
+}
+
+export interface Found {
+  endpoints: Endpoint[];
+  findings: Finding[];
 }
 
 export interface Progress {
@@ -22,7 +29,6 @@ export interface Progress {
   services_total: number;
   services_done: number;
   inspecting: number | null;
-  endpoints: number;
 }
 
 export interface ScanRow {
