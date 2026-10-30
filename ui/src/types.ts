@@ -97,6 +97,16 @@ export interface Report {
   technologies?: Tech[];
   // The API documents served without auth.
   apis?: Api[];
+  // The target's DNS records.
+  dns?: DnsRecord[];
+}
+
+export interface DnsRecord {
+  name: string;
+  // `A`, `MX`, `TXT`, ...
+  kind: string;
+  value: string;
+  ttl: number;
 }
 
 export interface Api {

@@ -151,12 +151,13 @@ pub(crate) async fn scan_target(
 
     // What each service says first on connect, read from every open port at
     // once, so the silent ones cost one wait between them.
+    // DNS is asked at the same time.
     let open: Vec<u16> = open_ports.iter().map(|op| op.port).collect();
-    let banners: HashMap<u16, String> =
-        scanner::banner::grab_all(ip, &open, 64, opts.connect_timeout)
-            .await
-            .into_iter()
-            .collect();
+    let (greetings, records) = tokio::join!(
+        scanner::banner::grab_all(ip, &open, 64, opts.connect_timeout),
+        scanner::dns::lookup(&target.host, ip),
+    );
+    let banners: HashMap<u16, String> = greetings.into_iter().collect();
     for (port, text) in &banners {
         progress.banner(*port, text);
     }
@@ -206,6 +207,7 @@ pub(crate) async fn scan_target(
         p.banner = banners.get(&p.port).cloned();
     }
     report.technologies = report::technologies(&report.open_ports, &services);
+    report::add_dns(&mut report, &target.host, &records);
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {
         report,

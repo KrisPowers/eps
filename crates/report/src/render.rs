@@ -483,6 +483,21 @@ fn api_section(paint: Paint, report: &Report, out: &mut String) {
     }
 }
 
+/// The target's DNS records, a line each.
+fn dns_section(paint: Paint, report: &Report, out: &mut String) {
+    if report.dns.is_empty() {
+        return;
+    }
+    heading(paint, "DNS", "", out);
+    for r in &report.dns {
+        let mut row = Row::new(paint);
+        row.add("1", r.kind);
+        row.pad_to(8);
+        row.add("", &fit(&r.value, WIDTH - 8));
+        row.finish(out);
+    }
+}
+
 /// Each HTTPS service's certificate, and any old TLS versions it accepts.
 fn tls_section(paint: Paint, report: &Report, out: &mut String) {
     for p in &report.open_ports {
@@ -581,6 +596,7 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
         port_section(paint, report, &mut out);
     }
     tech_section(paint, report, &mut out);
+    dns_section(paint, report, &mut out);
     tls_section(paint, report, &mut out);
     api_section(paint, report, &mut out);
 

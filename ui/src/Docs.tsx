@@ -30,7 +30,7 @@ const HEADERS: [string, string][] = [
 const SEVERITIES: [string, string, string][] = [
   ["high", "bad", "A sensitive endpoint open without auth, such as /actuator/env, /.env or /.git/HEAD, or a high-risk service exposed: Redis, MongoDB, a database, the Docker API, etcd, kubelet."],
   ["medium", "warn", "Exposed services like RDP, VNC, SMB, FTP or message brokers; an expired TLS certificate; TLS 1.0 or 1.1 still accepted; CORS allowing any origin with credentials."],
-  ["low", "plain", "Cleartext HTTP carrying open endpoints, open APIs with no rate-limit headers, no throttling under a burst, a self-signed certificate or one expiring within 30 days, HTTPS without HSTS, pages without CSP or framing protection, cookies missing their flags."],
+  ["low", "plain", "No SPF or DMARC for a domain that takes mail, or DMARC that only monitors; cleartext HTTP carrying open endpoints, open APIs with no rate-limit headers, no throttling under a burst, a self-signed certificate or one expiring within 30 days, HTTPS without HSTS, pages without CSP or framing protection, cookies missing their flags."],
   ["info", "ok", "Good signs, such as a sensitive path correctly behind auth."],
 ];
 
@@ -74,6 +74,7 @@ export function Docs() {
         <p>A range opens on its <b>Hosts</b>: each host that answered, with its open ports. <b>Scan host</b> scans one of them in full.</p>
         <p><b>Technologies</b> lists the software recognized on each port, from what the scan already saw: <code>Server</code> and <code>X-Powered-By</code> headers, session cookie names, paths only one product answers, and service greetings.</p>
         <p><b>API</b> reads any OpenAPI or Swagger document a port serves without auth at a conventional path, and lists its operations, marking those that change data with no security requirement declared.</p>
+        <p><b>DNS</b> lists the target's records, asked of the resolver the dashboard uses: addresses, aliases, mail and name servers, TXT and CAA, its DMARC policy, and the reverse name of the address scanned. A domain that takes mail is checked for SPF and DMARC.</p>
         <p><b>History</b> lists every kept scan of the same target, with a bar per finished scan of what it found, so a trend shows at a glance.</p>
         <p><b>Changes</b> compares a finished scan with the last finished scan of the same target: ports that opened or closed, findings that are new or resolved.</p>
         <p><b>Export</b> downloads a finished scan as JSON, the same report <code>--json</code> prints; Markdown, to paste into a ticket; or SARIF, for code-scanning tools such as GitHub's.</p>

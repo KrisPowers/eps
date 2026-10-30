@@ -132,6 +132,7 @@ export function App() {
                     <>
                       <NavItem to={href(selected.id, "tech")} icon="dns" label="Technologies" on={page === "tech"} />
                       <NavItem to={href(selected.id, "api")} icon="lock" label="API" on={page === "api"} />
+                      <NavItem to={href(selected.id, "dns")} icon="language" label="DNS" on={page === "dns"} />
                     </>
                   )}
                   <NavItem to={href(selected.id, "history")} icon="history" label="History" on={page === "history"} />
