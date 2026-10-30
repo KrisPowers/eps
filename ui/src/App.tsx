@@ -3,7 +3,7 @@ import { api } from "./api";
 import { Docs } from "./Docs";
 import { Icon, type IconName } from "./Icon";
 import { go, href, readHash, type Page } from "./route";
-import { results, ScanView, SEVERITY } from "./ScanView";
+import { Card, results, ScanView, SEVERITY } from "./ScanView";
 import type { Progress, Report, ScanRow, Severity } from "./types";
 
 // App is the frame every page sits in: a header with the search bar, help
@@ -153,16 +153,22 @@ function NavItem({ to, icon, label, on, count }: { to: string; icon: IconName; l
   );
 }
 
-// Home is the scans kept, newest first, each opening its own pages.
+// Home is the scans kept, newest first, a card each: what it found, each
+// count opening that page of the scan.
 function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: string; onScan: (command: string) => Promise<void> }) {
   return (
     <>
-      <h1 className="page-title">Scans</h1>
+      <div className="page-head">
+        <div className="page-head-main">
+          <h1>Scans</h1>
+          <div className="page-sub">Scan only hosts you own or are allowed to test.</div>
+        </div>
+      </div>
       {problem && !scans && (
         <div className="callout bad"><Icon name="error" /><span>Can't reach portscan: {problem}</span></div>
       )}
       {scans && scans.length === 0 && (
-        <div className="panel welcome">
+        <div className="card welcome">
           <Icon name="lan" size={40} />
           <h2>No scans yet</h2>
           <p className="muted">Type a host into the search bar, such as <code>192.168.1.10</code> or <code>api.internal:8080</code>, and press Enter.</p>
@@ -170,40 +176,35 @@ function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: st
         </div>
       )}
       {scans && scans.length > 0 && (
-        <div className="panel">
-          <div className="table-wrap">
-            <table className="table rows">
-              <thead><tr><th aria-label="Status" /><th className="grow">Target</th><th>Open ports</th><th>Endpoints</th><th>Findings</th><th>Started</th></tr></thead>
-              <tbody>
-                {scans.map((s) => (
-                  <tr key={s.id} onClick={() => go(s.id)}>
-                    <td><Mark scan={s} /></td>
-                    <td><a href={href(s.id)}>{s.command.replace(/^@\s*/, "") || s.target}</a></td>
-                    {s.status === "done" ? (
-                      <>
-                        <td>{s.open_ports}</td>
-                        <td>{s.endpoints}</td>
-                        <td><Severities counts={s.findings} /></td>
-                      </>
-                    ) : (
-                      <td colSpan={3} className="muted">{s.status === "failed" ? "Failed" : s.status === "queued" ? "Queued" : "Scanning"}</td>
-                    )}
-                    <td className="muted">{ago(s.created)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="cards wide">
+          {scans.map((s) => (
+            <Card key={s.id}
+              title={<a className="card-link" href={href(s.id)}><Mark scan={s} /><span>{s.command.replace(/^@\s*/, "") || s.target}</span></a>}
+              sub={<>{ago(s.created)}{s.resolved_ip && s.resolved_ip !== s.target && <> · <span className="mono">{s.resolved_ip}</span></>}</>}
+              action={<a className="card-action" href={href(s.id)}>Open</a>}>
+              {s.status === "done" ? (
+                <>
+                  <div className="stats">
+                    <a className="stat" href={href(s.id, "ports")}><b>{s.open_ports}</b><span>Open ports</span></a>
+                    <a className="stat" href={href(s.id, "endpoints")}><b>{s.endpoints}</b><span>Endpoints</span></a>
+                    <a className="stat" href={href(s.id, "findings")}><b>{Object.values(s.findings).reduce((n, c) => n + c, 0)}</b><span>Findings</span></a>
+                  </div>
+                  <div className="card-foot"><Severities counts={s.findings} /></div>
+                </>
+              ) : (
+                <div className="card-foot muted">{s.status === "failed" ? "Failed" : s.status === "queued" ? "Queued" : "Scanning"}</div>
+              )}
+            </Card>
+          ))}
         </div>
       )}
-      <p className="page-note">Scan only hosts you own or are allowed to test.</p>
     </>
   );
 }
 
 function Severities({ counts }: { counts: Record<Severity, number> }) {
   const shown = (["high", "medium", "low"] as const).filter((s) => counts[s] > 0);
-  if (!shown.length) return <span className="muted">None</span>;
+  if (!shown.length) return <span className="muted">Nothing serious</span>;
   return (
     <span className="chips">
       {shown.map((s) => <span key={s} className={"chip " + SEVERITY[s]}>{counts[s]} {s}</span>)}

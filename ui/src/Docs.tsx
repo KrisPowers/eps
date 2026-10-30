@@ -28,9 +28,9 @@ const SEVERITIES: [string, string, string][] = [
 export function Docs() {
   return (
     <article className="docs">
-      <h1 className="page-title">Help</h1>
+      <div className="page-head"><div className="page-head-main"><h1>Help</h1></div></div>
 
-      <section className="panel doc">
+      <section className="card doc">
         <h2>Starting a scan</h2>
         <p>The search bar is the <code>@</code> command line. Type what you'd type after <code>@</code> in a terminal and press Enter:</p>
         <ul className="examples">
@@ -42,7 +42,7 @@ export function Docs() {
         <p>An empty line scans this computer. Focused, the bar lists your recent scans, narrowed to what you type; <kbd>Ctrl+K</kbd> focuses it from anywhere.</p>
       </section>
 
-      <section className="panel doc">
+      <section className="card doc">
         <h2>Options</h2>
         <div className="table-wrap">
           <table className="table">
@@ -56,7 +56,7 @@ export function Docs() {
         <p className="muted"><code>--paths</code> and <code>--serve</code> only work in a terminal.</p>
       </section>
 
-      <section className="panel doc">
+      <section className="card doc">
         <h2>Reading a scan</h2>
         <p>Once a scan starts, the sidebar holds its pages:</p>
         <ul className="examples">
@@ -67,10 +67,10 @@ export function Docs() {
         <p>A port's results show as soon as it is done, while the rest are still being checked.</p>
       </section>
 
-      <section className="panel doc">
+      <section className="card doc">
         <h2>Controls</h2>
         <p>Each endpoint has a block per security control, coloured by its verdict:</p>
-        <div className="legend inline">
+        <div className="legend">
           <span className="legend-item"><span className="swatch configured" />Configured</span>
           <span className="legend-item"><span className="swatch insecure" />Configured but bypassable</span>
           <span className="legend-item"><span className="swatch missing" />Not configured</span>
@@ -81,7 +81,7 @@ export function Docs() {
         </ul>
       </section>
 
-      <section className="panel doc">
+      <section className="card doc">
         <h2>Severities</h2>
         <ul className="examples">
           {SEVERITIES.map(([name, tone, what]) => <li key={name}><span className={"chip " + tone}>{name}</span><span>{what}</span></li>)}
@@ -89,7 +89,7 @@ export function Docs() {
         <p className="muted">portscan reports exposure, never intent: it can't know whether a host is meant to be public. The call is yours.</p>
       </section>
 
-      <section className="panel doc">
+      <section className="card doc">
         <h2>Authorized use only</h2>
         <p>portscan is read-only: ordinary TCP connections and HTTP <code>GET</code> requests, nothing written, submitted or logged in to. Scan only hosts you own or are allowed to test; probing systems you don't control may be unlawful.</p>
       </section>
