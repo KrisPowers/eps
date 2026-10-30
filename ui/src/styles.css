@@ -92,7 +92,7 @@ kbd {
   grid-template-columns: calc(var(--side) - 24px) minmax(0, 720px) 1fr;
   height: var(--head); padding: 0 16px 0 24px; background: var(--chrome); border-bottom: 1px solid var(--line);
 }
-.menu-btn { display: none; }
+.header .menu-btn { display: none; }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 22px; font-weight: 400; letter-spacing: -.01em; }
 .brand .icon { color: var(--accent); }
 .header-actions { justify-self: end; display: flex; align-items: center; gap: 4px; }
@@ -126,7 +126,7 @@ kbd {
 .nav-head > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scrim { display: none; }
 
-.page { min-width: 0; width: 100%; max-width: 1160px; padding: 24px 32px 56px; animation: rise .3s var(--ease) both; }
+.page { min-width: 0; width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 32px 56px; animation: rise .3s var(--ease) both; }
 .page-title { margin-bottom: 20px; font-size: 22px; font-weight: 400; }
 .page-note { margin-top: 24px; font-size: 12px; color: var(--text-3); }
 
@@ -387,7 +387,7 @@ kbd {
 /* ---- narrow windows: the sidebar slides over the page from the menu ---- */
 @media (max-width: 900px) {
   .header { grid-template-columns: auto auto minmax(0, 1fr) auto; padding: 0 8px; gap: 4px; }
-  .menu-btn { display: inline-grid; width: 44px; height: 44px; }
+  .header .menu-btn { display: inline-grid; width: 44px; height: 44px; }
   .brand { margin-right: 8px; }
   .brand span { display: none; }
   .search kbd { display: none; }
