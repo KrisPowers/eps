@@ -8,12 +8,12 @@ import { Card, results, ScanView, SEVERITY } from "./ScanView";
 import type { Progress, Report, ScanRow, Severity } from "./types";
 
 // App is the frame every page sits in: a header with the search bar, help
-// and the theme, a sidebar of pages, and the page itself.
+// and settings, a sidebar of pages, and the page itself.
 export function App() {
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [route, setRoute] = useState(readHash);
-  const { id, view, port } = route;
+  const { id, view, page, port } = route;
   const [problem, setProblem] = useState("");
   const [toast, setToast] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -58,14 +58,23 @@ export function App() {
     if (scans && id && !selected) go("");
   }, [scans, id, selected]);
 
-  // A finished scan's report is fetched once and kept.
+  // The last finished scan of the same target before this one, which the
+  // Changes page compares with. The scans are newest first.
+  const before = selected?.status === "done"
+    ? scans?.find((s) => s.target === selected.target && s.status === "done" && s.created < selected.created)
+    : undefined;
+
+  // A finished scan's report, and the one before it, are fetched once and kept.
   const doneId = selected?.status === "done" ? selected.id : "";
+  const beforeId = before?.id ?? "";
   useEffect(() => {
-    if (!doneId || reports[doneId]) return;
-    api.scan(doneId)
-      .then((d) => d.report && setReports((r) => ({ ...r, [doneId]: d.report! })))
-      .catch((e) => setToast((e as Error).message));
-  }, [doneId, reports]);
+    for (const want of [doneId, beforeId]) {
+      if (!want || reports[want]) continue;
+      api.scan(want)
+        .then((d) => d.report && setReports((r) => ({ ...r, [want]: d.report! })))
+        .catch((e) => setToast((e as Error).message));
+    }
+  }, [doneId, beforeId, reports]);
 
   if (selected?.progress) last.current[selected.id] = selected.progress;
   const progress = selected && (selected.progress ?? last.current[selected.id]);
@@ -111,7 +120,12 @@ export function App() {
             <>
               <a className="nav-back" href="#/"><Icon name="arrow_back" /><span>All scans</span></a>
               <hr className="nav-rule" />
-              {selected && <NavItem to={href(selected.id)} icon="shield" label="Findings" on />}
+              {selected && (
+                <>
+                  <NavItem to={href(selected.id)} icon="shield" label="Findings" on={page === "findings"} />
+                  <NavItem to={href(selected.id, "changes")} icon="difference" label="Changes" on={page === "changes"} />
+                </>
+              )}
             </>
           ) : (
             <NavItem to="#/" icon="history" label="Scans" on={view === "scans"} />
@@ -119,11 +133,12 @@ export function App() {
         </nav>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
-        <main className="page" key={view + id + "/" + (port ?? "")}>
+        <main className="page" key={view + id + "/" + page + (port ?? "")}>
           {view === "docs" && <Docs />}
           {view === "settings" && <Settings />}
           {view === "scan" && selected && (
-            <ScanView scan={selected} items={items} progress={progress} port={port}
+            <ScanView scan={selected} report={reports[selected.id]} items={items} progress={progress} page={page} port={port}
+              previous={before && { scan: before, report: reports[before.id] }}
               onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
           )}
           {view === "scans" && <Home scans={scans} problem={problem} onScan={start} />}
