@@ -58,12 +58,7 @@ export function Docs() {
 
       <section className="card doc">
         <h2>Reading a scan</h2>
-        <p>Once a scan starts, the sidebar holds its pages:</p>
-        <ul className="examples">
-          <li><b>Ports</b><span>every open port as a tile; each opens a page with that port's findings and endpoints</span></li>
-          <li><b>Endpoints</b><span>every HTTP endpoint found, on any port</span></li>
-          <li><b>Findings</b><span>everything worth a look, worst first</span></li>
-        </ul>
+        <p>A scan opens on its <b>Findings</b>: how many of each severity it found, then every open port, worst first. Open a port for its own page, with the findings on it and the endpoints it serves.</p>
         <p>A port's results show as soon as it is done, while the rest are still being checked.</p>
       </section>
 

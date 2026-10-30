@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as KeyEven
 import { api } from "./api";
 import { Docs } from "./Docs";
 import { Icon, type IconName } from "./Icon";
-import { go, href, readHash, type Page } from "./route";
+import { go, href, readHash } from "./route";
 import { Card, results, ScanView, SEVERITY } from "./ScanView";
 import type { Progress, Report, ScanRow, Severity } from "./types";
 
@@ -12,7 +12,7 @@ export function App() {
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [route, setRoute] = useState(readHash);
-  const { id, docs, page, port } = route;
+  const { id, docs, port } = route;
   const [problem, setProblem] = useState("");
   const [toast, setToast] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -69,12 +69,6 @@ export function App() {
   if (selected?.progress) last.current[selected.id] = selected.progress;
   const progress = selected && (selected.progress ?? last.current[selected.id]);
   const items = selected ? results(reports[selected.id], progress) : null;
-  const found = items?.flatMap((i) => (i.found ? [i.found] : [])) ?? [];
-  const counts: Record<Page, number | undefined> = {
-    ports: items?.length,
-    endpoints: items ? found.reduce((n, f) => n + f.endpoints.length, 0) : undefined,
-    findings: items ? found.reduce((n, f) => n + f.findings.length, 0) : undefined,
-  };
 
   const start = async (command: string) => {
     try {
@@ -112,22 +106,26 @@ export function App() {
 
       <div className="shell">
         <nav className={"sidebar" + (drawer ? " open" : "")} aria-label="Pages">
-          <NavItem to="#/" icon="history" label="Scans" on={!id && !docs} />
-          {selected && (
-            <div className="nav-group">
-              <div className="nav-head" title={selected.target}><Mark scan={selected} /><span>{selected.target}</span></div>
-              {PAGES.map(([key, label, icon]) => (
-                <NavItem key={key} to={href(selected.id, key)} icon={icon} label={label} on={page === key} count={counts[key]} />
-              ))}
-            </div>
+          {id ? (
+            <>
+              <a className="nav-back" href="#/"><Icon name="arrow_back" /><span>All scans</span></a>
+              {selected && (
+                <div className="nav-group">
+                  <div className="nav-head" title={selected.target}><Mark scan={selected} /><span>{selected.target}</span></div>
+                  <NavItem to={href(selected.id)} icon="shield" label="Findings" on />
+                </div>
+              )}
+            </>
+          ) : (
+            <NavItem to="#/" icon="history" label="Scans" on={!docs} />
           )}
         </nav>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
-        <main className="page" key={docs ? "docs" : id + page}>
+        <main className="page" key={docs ? "docs" : id + "/" + (port ?? "")}>
           {docs && <Docs />}
           {!docs && selected && (
-            <ScanView scan={selected} items={items} progress={progress} page={page} port={port}
+            <ScanView scan={selected} items={items} progress={progress} port={port}
               onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
           )}
           {!docs && !id && <Home scans={scans} problem={problem} onScan={start} />}
@@ -141,20 +139,17 @@ export function App() {
   );
 }
 
-const PAGES: [Page, string, IconName][] = [["ports", "Ports", "router"], ["endpoints", "Endpoints", "link"], ["findings", "Findings", "shield"]];
-
-function NavItem({ to, icon, label, on, count }: { to: string; icon: IconName; label: string; on: boolean; count?: number }) {
+function NavItem({ to, icon, label, on }: { to: string; icon: IconName; label: string; on: boolean }) {
   return (
     <a className={"nav-item" + (on ? " on" : "")} href={to} aria-current={on ? "page" : undefined}>
       <Icon name={icon} />
       <span className="nav-label">{label}</span>
-      {count !== undefined && <span className="nav-count">{count}</span>}
     </a>
   );
 }
 
-// Home is the scans kept, newest first, a card each: what it found, each
-// count opening that page of the scan.
+// Home is the scans kept, newest first, a card each with what it found,
+// opening the scan's findings.
 function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: string; onScan: (command: string) => Promise<void> }) {
   return (
     <>
@@ -185,9 +180,9 @@ function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: st
               {s.status === "done" ? (
                 <>
                   <div className="stats">
-                    <a className="stat" href={href(s.id, "ports")}><b>{s.open_ports}</b><span>Open ports</span></a>
-                    <a className="stat" href={href(s.id, "endpoints")}><b>{s.endpoints}</b><span>Endpoints</span></a>
-                    <a className="stat" href={href(s.id, "findings")}><b>{Object.values(s.findings).reduce((n, c) => n + c, 0)}</b><span>Findings</span></a>
+                    <div className="stat"><b>{s.open_ports}</b><span>Open ports</span></div>
+                    <div className="stat"><b>{s.endpoints}</b><span>Endpoints</span></div>
+                    <div className="stat"><b>{Object.values(s.findings).reduce((n, c) => n + c, 0)}</b><span>Findings</span></div>
                   </div>
                   <div className="card-foot"><Severities counts={s.findings} /></div>
                 </>
