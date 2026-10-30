@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { download, FORMATS } from "./export";
 import { Icon } from "./Icon";
-import { href } from "./route";
+import { href, type Page } from "./route";
 import type { Endpoint, Finding, Port, Posture, Progress, Report, ScanRow, Severity } from "./types";
 
 // A port as the page draws it: waiting its turn, being checked, or done with
@@ -15,13 +16,23 @@ export function results(report: Report | undefined, p: Progress | undefined): It
   return null;
 }
 
-// ScanView is a scan: its findings, one result per open port, worst first,
-// or, with a port picked, that port's own page.
-export function ScanView({ scan, items, progress: p, port, onAgain, onDelete }: {
+// The last finished scan of the same target before this one, to compare with.
+export interface Previous {
   scan: ScanRow;
+  report?: Report;
+}
+
+// ScanView is a scan: its findings, one result per open port, worst first,
+// or, with a port picked, that port's own page, or what changed since the
+// scan before it.
+export function ScanView({ scan, report, items, progress: p, page, port, previous, onAgain, onDelete }: {
+  scan: ScanRow;
+  report?: Report;
   items: Item[] | null;
   progress?: Progress;
+  page: Page;
   port: number | null;
+  previous?: Previous;
   onAgain: () => void;
   onDelete: () => void;
 }) {
@@ -42,6 +53,7 @@ export function ScanView({ scan, items, progress: p, port, onAgain, onDelete }: 
           </div>
         </div>
         <div className="page-actions">
+          <Export report={report} when={scan.finished ?? scan.created} />
           <button type="button" className="btn" disabled={going} onClick={onAgain}>
             <Icon name="refresh" size={18} /><span>Scan again</span>
           </button>
@@ -53,7 +65,9 @@ export function ScanView({ scan, items, progress: p, port, onAgain, onDelete }: 
       {scan.status === "failed" && (
         <div className="callout bad"><Icon name="error" /><span>{scan.error ?? "The scan failed."}</span></div>
       )}
-      {items ? <Results id={scan.id} items={items} /> : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
+      {page === "changes"
+        ? <Changes scan={scan} report={report} previous={previous} />
+        : items ? <Results id={scan.id} items={items} /> : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
     </>
   );
 }
@@ -106,6 +120,101 @@ function Results({ id, items }: { id: string; items: Item[] }) {
           </li>
         ))}
       </ul>
+    </>
+  );
+}
+
+// Export downloads the finished report as JSON, Markdown or SARIF.
+function Export({ report, when }: { report?: Report; when: number }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  return (
+    <div className="menu-wrap" ref={box}>
+      <button type="button" className="btn" disabled={!report} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name="download" size={18} /><span>Export</span>
+      </button>
+      {open && report && (
+        <div className="menu" role="menu" aria-label="Export as">
+          {FORMATS.map(([format, label]) => (
+            <button key={format} type="button" role="menuitem" className="menu-item"
+              onClick={() => {
+                download(report, when, format);
+                setOpen(false);
+              }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Changes is what differs from the last finished scan of the same target:
+// ports that opened or closed, findings that are new or gone.
+function Changes({ scan, report, previous }: { scan: ScanRow; report?: Report; previous?: Previous }) {
+  if (scan.status !== "done") return <div className="card empty">Changes show once the scan finishes</div>;
+  if (!previous) return <div className="card empty">No earlier scan of {scan.target} to compare with</div>;
+  if (!report || !previous.report) return <Loading />;
+  const before = previous.report;
+  const ports = (r: Report) => new Set(r.open_ports.map((o) => o.port));
+  const key = (f: Finding) => f.severity + "|" + f.title + "|" + f.location;
+  const keys = (r: Report) => new Set(r.findings.map(key));
+  const opened = report.open_ports.filter((o) => !ports(before).has(o.port));
+  const closed = before.open_ports.filter((o) => !ports(report).has(o.port));
+  const added = report.findings.filter((f) => !keys(before).has(key(f)));
+  const gone = before.findings.filter((f) => !keys(report).has(key(f)));
+  const portList = (id: string, list: Port[]) => (
+    <ul className="results">
+      {list.map((o) => (
+        <li key={o.port}>
+          <a className="result" href={href(id, o.port)}>
+            <span className="port-num">{o.port}<small>/tcp</small></span>
+            <span className="result-service">{o.service}</span>
+            <span /><span />
+            <Icon name="chevron_right" className="result-go" />
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+  const findingList = (list: Finding[]) => (
+    <ul className="findings">{list.map((f, k) => <FindingRow key={k} finding={f} at />)}</ul>
+  );
+  return (
+    <>
+      <p className="lede">Compared with <a href={href(previous.scan.id)}>the scan from {new Date(previous.scan.created).toLocaleString()}</a></p>
+      <div className="tally four">
+        <div className="tally-item bad"><b>{opened.length}</b><span>Ports opened</span></div>
+        <div className="tally-item ok"><b>{closed.length}</b><span>Ports closed</span></div>
+        <div className="tally-item warn"><b>{added.length}</b><span>New findings</span></div>
+        <div className="tally-item ok"><b>{gone.length}</b><span>Resolved findings</span></div>
+      </div>
+      {opened.length + closed.length + added.length + gone.length === 0 ? (
+        <div className="card empty">Nothing changed</div>
+      ) : (
+        <div className="stack">
+          {opened.length > 0 && <Card title="Ports opened" sub={plural(opened.length, "port")}>{portList(scan.id, opened)}</Card>}
+          {closed.length > 0 && <Card title="Ports closed" sub={plural(closed.length, "port")}>{portList(previous.scan.id, closed)}</Card>}
+          {added.length > 0 && <Card title="New findings" sub={plural(added.length, "finding")}>{findingList(added)}</Card>}
+          {gone.length > 0 && <Card title="Resolved findings" sub={plural(gone.length, "finding")}>{findingList(gone)}</Card>}
+        </div>
+      )}
     </>
   );
 }
@@ -191,8 +300,11 @@ function Step({ id, to, label, icon }: { id: string; to?: Item; label: string; i
   return <a className="icon-btn" href={href(id, to.port)} aria-label={label} title={label}><Icon name={icon} /></a>;
 }
 
-function FindingRow({ finding: f }: { finding: Finding }) {
-  const where = path(f.location);
+// FindingRow is one finding; `at` names the port it is on as well as the
+// path, for a list that mixes ports.
+function FindingRow({ finding: f, at }: { finding: Finding; at?: boolean }) {
+  const port = /(?:^|\()port (\d+)/.exec(f.location)?.[1];
+  const where = [at && port ? "port " + port : "", path(f.location)].filter(Boolean).join(" ");
   return (
     <li className="finding">
       <span className={"chip " + SEVERITY[f.severity]}>{f.severity}</span>
