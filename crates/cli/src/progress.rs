@@ -1,10 +1,12 @@
 //! Where a scan is while it runs: the phase, how many ports are done and the
-//! highest one reached, the open ports found so far, which service is being
-//! inspected, and what each port that is done turned out to expose.
+//! highest one reached, the open ports found so far, which services are being
+//! inspected, what each port that is done turned out to expose, and the DNS
+//! records once they're in. The checks run while the sweep goes on, so all of
+//! these fill in at once.
 //! `--serve` hands a snapshot to the dashboard, which draws the scan as it
 //! goes.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -33,12 +35,14 @@ pub struct Progress {
     open: Mutex<Vec<u16>>,
     services_total: AtomicUsize,
     services_done: AtomicUsize,
-    /// The port whose HTTP service is being inspected, 0 for none.
-    inspecting: AtomicUsize,
+    /// The ports whose HTTP services are being inspected.
+    inspecting: Mutex<BTreeSet<u16>>,
     /// Each port that is done, with its endpoints and findings.
     found: Mutex<HashMap<u16, Value>>,
     /// What each service that spoke first said.
     banners: Mutex<HashMap<u16, String>>,
+    /// The DNS records and their findings, once the lookup is done.
+    dns: Mutex<Value>,
 }
 
 impl Progress {
@@ -60,18 +64,22 @@ impl Progress {
         }
     }
 
-    pub fn start_endpoints(&self, services: usize) {
-        self.services_total.store(services, Ordering::Relaxed);
-        self.set_phase(Phase::Endpoints);
+    /// One more HTTP service is waiting to be inspected.
+    pub fn service_found(&self) {
+        self.services_total.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn inspecting(&self, port: u16) {
-        self.inspecting.store(port as usize, Ordering::Relaxed);
+        self.inspecting.lock().unwrap_or_else(|e| e.into_inner()).insert(port);
     }
 
-    pub fn inspected(&self) {
+    pub fn inspected(&self, port: u16) {
         self.services_done.fetch_add(1, Ordering::Relaxed);
-        self.inspecting.store(0, Ordering::Relaxed);
+        self.inspecting.lock().unwrap_or_else(|e| e.into_inner()).remove(&port);
+    }
+
+    pub fn dns(&self, found: Value) {
+        *self.dns.lock().unwrap_or_else(|e| e.into_inner()) = found;
     }
 
     pub fn banner(&self, port: u16, text: &str) {
@@ -97,7 +105,13 @@ impl Progress {
                 json!({ "port": p, "service": service, "banner": banners.get(p), "found": found.get(p) })
             })
             .collect();
-        let inspecting = self.inspecting.load(Ordering::Relaxed);
+        let inspecting: Vec<u16> = self
+            .inspecting
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .copied()
+            .collect();
         json!({
             "phase": *self.phase.lock().unwrap_or_else(|e| e.into_inner()),
             "ip": *self.ip.lock().unwrap_or_else(|e| e.into_inner()),
@@ -107,7 +121,8 @@ impl Progress {
             "open": open,
             "services_total": self.services_total.load(Ordering::Relaxed),
             "services_done": self.services_done.load(Ordering::Relaxed),
-            "inspecting": if inspecting == 0 { Value::Null } else { json!(inspecting) },
+            "inspecting": inspecting,
+            "dns": *self.dns.lock().unwrap_or_else(|e| e.into_inner()),
         })
     }
 }

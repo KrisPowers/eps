@@ -22,6 +22,7 @@ scanner.workspace = true
 endpoints.workspace = true
 report.workspace = true
 clap.workspace = true
+futures.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

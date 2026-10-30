@@ -35,6 +35,10 @@ export interface Cert {
 export interface Found {
   endpoints: Endpoint[];
   findings: Finding[];
+  // Missing from scans made before these were found as each port finished.
+  tls?: Tls | null;
+  apis?: Api[];
+  technologies?: Tech[];
 }
 
 export interface Progress {
@@ -47,7 +51,10 @@ export interface Progress {
   open: Port[];
   services_total: number;
   services_done: number;
-  inspecting: number | null;
+  // The ports whose HTTP services are being inspected; several run at once.
+  inspecting: number[];
+  // The DNS records and their findings, once the lookup is done.
+  dns?: { records: DnsRecord[]; findings: Finding[] } | null;
 }
 
 export interface ScanRow {

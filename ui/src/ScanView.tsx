@@ -92,8 +92,8 @@ function Status({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
   return (
     <>
       <span className="chip plain"><span className="spinner tiny" />Scanning</span>
-      {p?.phase === "endpoints" && p.inspecting && (
-        <span>Checking port <b className="mono">{p.inspecting}</b>, {Math.min(p.services_done + 1, p.services_total)} of {p.services_total}</span>
+      {p && p.services_total > 0 && (
+        <span>Checked <b>{p.services_done}</b> of <b>{p.services_total}</b> HTTP services</span>
       )}
     </>
   );
@@ -710,7 +710,7 @@ function plural(n: number, word: string) {
 function fromProgress(p: Progress): Item[] {
   return p.open.map((o): Item => ({
     ...o,
-    state: o.found ? "done" : o.port === p.inspecting ? "checking" : "waiting",
+    state: o.found ? "done" : p.inspecting.includes(o.port) ? "checking" : "waiting",
   }));
 }
 

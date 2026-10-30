@@ -19,8 +19,10 @@ use std::time::Duration;
 
 use clap::Parser;
 use endpoints::{HttpConfig, PathSpec, ServiceReport};
+use futures::stream::{FuturesUnordered, StreamExt};
 use scanner::scan;
 use scanner::target::Target;
+use tokio::sync::{mpsc, Semaphore};
 
 use crate::cli::Cli;
 use crate::progress::{Phase, Progress};
@@ -135,72 +137,79 @@ pub(crate) async fn scan_target(
         None => scan::all_ports(),
     };
 
-    // Port scan.
+    // Three things run at once: the sweep; the checks on each open port,
+    // started as soon as the sweep finds it; and DNS. Each puts what it
+    // finds into `progress` as it goes.
     progress.start_ports(&ip.to_string(), ports_to_scan.len());
-    let on_port = |port: u16, state: scan::PortState| {
-        progress.port_done(port, state == scan::PortState::Open)
-    };
-    let open_ports = scan::scan_ports_with(
-        ip,
-        &ports_to_scan,
-        opts.concurrency,
-        opts.connect_timeout,
-        &on_port,
-    )
-    .await;
-
-    // What each service says first on connect, read from every open port at
-    // once, so the silent ones cost one wait between them.
-    // DNS is asked at the same time.
-    let open: Vec<u16> = open_ports.iter().map(|op| op.port).collect();
-    let (greetings, records) = tokio::join!(
-        scanner::banner::grab_all(ip, &open, 64, opts.connect_timeout),
-        scanner::dns::lookup(&target.host, ip),
-    );
-    let banners: HashMap<u16, String> = greetings.into_iter().collect();
-    for (port, text) in &banners {
-        progress.banner(*port, text);
-    }
-
-    // What one port exposes, its endpoints and findings, goes into
-    // `progress` as soon as nothing more is coming for it.
     let rendered_ip = ip.to_string();
-    let checked = |op: &scan::OpenPort, svc: &[ServiceReport]| {
-        let r = report::assemble(&target.host, &rendered_ip, std::slice::from_ref(op), svc);
-        let found = serde_json::json!({ "endpoints": r.endpoints, "findings": r.findings });
-        progress.checked(op.port, found);
+    let ctx = Checks {
+        ip,
+        host: target.host.clone(),
+        url_host: target.url_host(),
+        rendered_ip: rendered_ip.clone(),
+        http: (!opts.no_discovery).then(|| build_http_config(opts)),
+        connect: opts.connect_timeout,
+        slots: Semaphore::new(SERVICES_AT_ONCE),
+        progress,
+    };
+    let (found_tx, mut found_rx) = mpsc::unbounded_channel::<scan::OpenPort>();
+
+    let sweep = async {
+        let on_port = move |port: u16, state: scan::PortState| {
+            let open = state == scan::PortState::Open;
+            progress.port_done(port, open);
+            if open {
+                let _ = found_tx.send(scan::OpenPort {
+                    port,
+                    service: scanner::ports::service_name(port),
+                    http_tls: scanner::ports::http_hint(port),
+                });
+            }
+        };
+        let open = scan::scan_ports_with(
+            ip,
+            &ports_to_scan,
+            opts.concurrency,
+            opts.connect_timeout,
+            &on_port,
+        )
+        .await;
+        // Dropping the sender tells the checks no more ports are coming.
+        drop(on_port);
+        progress.set_phase(Phase::Endpoints);
+        open
     };
 
-    // HTTP endpoint discovery + posture checks.
-    let services: Vec<ServiceReport> = if opts.no_discovery {
-        open_ports.iter().for_each(|op| checked(op, &[]));
-        Vec::new()
-    } else {
-        let cfg = build_http_config(opts);
-        let mut reports = Vec::new();
-        // Inspect ports that are known HTTP, or unknown (could be any app),
-        // but skip ports whose catalog service is a known non-HTTP protocol.
-        let (candidates, rest): (Vec<_>, Vec<_>) = open_ports
-            .iter()
-            .partition(|op| op.http_tls.is_some() || op.service == "unknown");
-        rest.into_iter().for_each(|op| checked(op, &[]));
-        progress.start_endpoints(candidates.len());
-        for op in candidates {
-            progress.inspecting(op.port);
-            match endpoints::inspect_service(&target.url_host(), op.port, op.http_tls, &cfg).await {
-                Ok(r) => {
-                    checked(op, std::slice::from_ref(&r));
-                    reports.push(r);
-                }
-                Err(e) => {
-                    checked(op, &[]);
-                    eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port);
-                }
+    let checks = async {
+        let mut running = FuturesUnordered::new();
+        let mut done = Vec::new();
+        let mut sweeping = true;
+        while sweeping || !running.is_empty() {
+            tokio::select! {
+                next = found_rx.recv(), if sweeping => match next {
+                    Some(op) => running.push(check(op, &ctx)),
+                    None => sweeping = false,
+                },
+                Some(found) = running.next(), if !running.is_empty() => done.push(found),
             }
-            progress.inspected();
         }
-        reports
+        done
     };
+
+    let dns = async {
+        let records = scanner::dns::lookup(&target.host, ip).await;
+        let (views, findings) = report::dns_report(&target.host, &records);
+        progress.dns(serde_json::json!({ "records": views, "findings": findings }));
+        records
+    };
+
+    let (open_ports, mut checked, records) = tokio::join!(sweep, checks, dns);
+    checked.sort_by_key(|c: &Checked| c.port);
+    let banners: HashMap<u16, String> = checked
+        .iter()
+        .filter_map(|c| Some((c.port, c.banner.clone()?)))
+        .collect();
+    let services: Vec<ServiceReport> = checked.into_iter().filter_map(|c| c.service).collect();
 
     let mut report = report::assemble(&target.host, &rendered_ip, &open_ports, &services);
     for p in &mut report.open_ports {
@@ -214,6 +223,79 @@ pub(crate) async fn scan_target(
         services,
         pinned: target.port,
     })
+}
+
+/// HTTP services inspected at once, each with its own requests in flight.
+const SERVICES_AT_ONCE: usize = 4;
+
+/// What the checks on each open port share.
+struct Checks<'a> {
+    ip: IpAddr,
+    /// The host as typed, which the report names.
+    host: String,
+    /// The host as a URL authority, IPv6 bracketed.
+    url_host: String,
+    rendered_ip: String,
+    /// The HTTP phase's settings, or `None` with `--no-discovery`.
+    http: Option<HttpConfig>,
+    connect: Duration,
+    slots: Semaphore,
+    progress: &'a Progress,
+}
+
+/// What the checks found on one open port.
+struct Checked {
+    port: u16,
+    banner: Option<String>,
+    service: Option<ServiceReport>,
+}
+
+/// One open port's checks, started as soon as the sweep finds it: its
+/// greeting and, for a port that may speak HTTP, its endpoints, TLS and API
+/// documents, at the same time. What it found goes into `progress` as one.
+async fn check(op: scan::OpenPort, ctx: &Checks<'_>) -> Checked {
+    // Ports that are known HTTP, or unknown (could be any app); not ones whose
+    // catalog service is a known non-HTTP protocol.
+    let http = ctx
+        .http
+        .as_ref()
+        .filter(|_| op.http_tls.is_some() || op.service == "unknown");
+    let inspect = async {
+        let cfg = http?;
+        ctx.progress.service_found();
+        let _slot = ctx.slots.acquire().await.ok();
+        ctx.progress.inspecting(op.port);
+        let result = endpoints::inspect_service(&ctx.url_host, op.port, op.http_tls, cfg).await;
+        ctx.progress.inspected(op.port);
+        result
+            .map_err(|e| eprintln!("@: note: HTTP inspection of port {} failed: {e}", op.port))
+            .ok()
+    };
+    let greeting = scanner::banner::grab(ctx.ip, op.port, ctx.connect);
+    let (banner, service) = tokio::join!(greeting, inspect);
+    if let Some(text) = &banner {
+        ctx.progress.banner(op.port, text);
+    }
+
+    let svc = service.as_slice();
+    let mut one = report::assemble(&ctx.host, &ctx.rendered_ip, std::slice::from_ref(&op), svc);
+    one.open_ports[0].banner = banner.clone();
+    let technologies = report::technologies(&one.open_ports, svc);
+    ctx.progress.checked(
+        op.port,
+        serde_json::json!({
+            "endpoints": one.endpoints,
+            "findings": one.findings,
+            "tls": one.open_ports[0].tls,
+            "apis": one.apis,
+            "technologies": technologies,
+        }),
+    );
+    Checked {
+        port: op.port,
+        banner,
+        service,
+    }
 }
 
 /// Scans a range: the catalog's ports on every address in it, to find the
