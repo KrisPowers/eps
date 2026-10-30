@@ -399,6 +399,7 @@ const POSTURE: Record<Posture, string> = {
   unknown: "Not shown",
 };
 const CONTROLS = [["auth", "AUTH"], ["jwt", "JWT"], ["rate", "RATE"], ["https", "HTTPS"]] as const;
+const HEADERS = [["hsts", "HSTS"], ["csp", "CSP"], ["frame", "FRAME"], ["nosniff", "SNIFF"], ["cors", "CORS"], ["cookies", "COOKIE"]] as const;
 
 function Legend() {
   return (
@@ -414,7 +415,7 @@ function EndpointsTable({ endpoints }: { endpoints: Endpoint[] }) {
   return (
     <div className="table-wrap">
       <table className="table">
-        <thead><tr><th>Status</th><th>Path</th><th>Controls</th><th className="grow">Note</th></tr></thead>
+        <thead><tr><th>Status</th><th>Path</th><th>Controls</th><th>Headers</th><th className="grow">Note</th></tr></thead>
         <tbody>
           {endpoints.map((e) => (
             <tr key={e.url}>
@@ -426,6 +427,15 @@ function EndpointsTable({ endpoints }: { endpoints: Endpoint[] }) {
                     <span key={key} className={"control " + e.controls[key]} title={label + ": " + POSTURE[e.controls[key]]}>{label}</span>
                   ))}
                 </span>
+              </td>
+              <td>
+                {e.headers && (
+                  <span className="controls">
+                    {HEADERS.map(([key, label]) => (
+                      <span key={key} className={"control " + e.headers![key]} title={label + ": " + POSTURE[e.headers![key]]}>{label}</span>
+                    ))}
+                  </span>
+                )}
               </td>
               <td className="muted">{e.note}</td>
             </tr>
