@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
 import { api } from "./api";
 import { Docs } from "./Docs";
+import { withDefaults } from "./prefs";
 import { Settings } from "./Settings";
 import { Icon, type IconName } from "./Icon";
 import { go, href, readHash } from "./route";
@@ -80,9 +81,11 @@ export function App() {
   const progress = selected && (selected.progress ?? last.current[selected.id]);
   const items = selected ? results(reports[selected.id], progress) : null;
 
-  const start = async (command: string) => {
+  // A new scan takes the options set in Settings; a scan run again keeps the
+  // line it was first run with.
+  const start = async (command: string, again = false) => {
     try {
-      const row = await api.start(command);
+      const row = await api.start(again ? command : withDefaults(command));
       await load();
       go(row.id);
     } catch (e) {
@@ -137,11 +140,11 @@ export function App() {
 
         <main className="page" key={view + id + "/" + page + (port ?? "")}>
           {view === "docs" && <Docs />}
-          {view === "settings" && <Settings />}
+          {view === "settings" && <Settings scans={scans} onChanged={load} />}
           {view === "scan" && selected && (
             <ScanView scan={selected} report={reports[selected.id]} items={items} progress={progress} page={page} port={port}
               previous={before && { scan: before, report: reports[before.id] }}
-              onAgain={() => start(selected.command || selected.target)} onScan={start} onDelete={() => remove(selected)} />
+              onAgain={() => start(selected.command || selected.target, true)} onScan={start} onDelete={() => remove(selected)} />
           )}
           {view === "scans" && <Home scans={scans} problem={problem} onScan={start} />}
         </main>

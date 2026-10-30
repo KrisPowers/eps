@@ -10,10 +10,15 @@ export const FORMATS: [Format, string][] = [["json", "JSON"], ["md", "Markdown"]
 export function download(report: Report, when: number, format: Format) {
   const body = format === "json" ? JSON.stringify(report, null, 2) : format === "md" ? markdown(report, when) : JSON.stringify(sarif(report), null, 2);
   const type = format === "md" ? "text/markdown" : "application/json";
+  save(`${report.target.replace(/[^\w.-]+/g, "_")}-${new Date(when).toISOString().slice(0, 10)}.${format}`, body, type);
+}
+
+// save hands `body` to the browser as a file called `name`.
+export function save(name: string, body: string, type: string) {
   const url = URL.createObjectURL(new Blob([body], { type }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${report.target.replace(/[^\w.-]+/g, "_")}-${new Date(when).toISOString().slice(0, 10)}.${format === "sarif" ? "sarif" : format}`;
+  a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

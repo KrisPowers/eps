@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
 import { Icon } from "./Icon";
 import { href, type Page } from "./route";
@@ -132,21 +133,8 @@ function Results({ id, items }: { id: string; items: Item[] }) {
 function Export({ report, when }: { report?: Report; when: number }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, box);
   return (
     <div className="menu-wrap" ref={box}>
       <button type="button" className="btn" disabled={!report} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
