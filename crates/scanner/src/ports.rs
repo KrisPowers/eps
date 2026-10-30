@@ -20,6 +20,11 @@ const fn p(port: u16, service: &'static str, http_tls: Option<bool>) -> KnownPor
     }
 }
 
+/// The catalog's ports, which a range scan probes on every host.
+pub fn catalog() -> Vec<u16> {
+    KNOWN.iter().map(|k| k.port).collect()
+}
+
 /// Well-known service ports, biased toward services an application
 /// engineer is likely to stand up or leave open by accident.
 pub const KNOWN: &[KnownPort] = &[

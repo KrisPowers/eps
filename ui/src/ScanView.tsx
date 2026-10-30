@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { download, FORMATS } from "./export";
 import { Icon } from "./Icon";
 import { href, type Page } from "./route";
-import type { Endpoint, Finding, Port, Posture, Progress, Report, ScanRow, Severity, Tls } from "./types";
+import type { Endpoint, Finding, Host, Port, Posture, Progress, Report, ScanRow, Severity, Tls } from "./types";
 
 // A port as the page draws it: waiting its turn, being checked, or done with
 // what it turned out to expose.
@@ -25,7 +25,7 @@ export interface Previous {
 // ScanView is a scan: its findings, one result per open port, worst first,
 // or, with a port picked, that port's own page, or what changed since the
 // scan before it.
-export function ScanView({ scan, report, items, progress: p, page, port, previous, onAgain, onDelete }: {
+export function ScanView({ scan, report, items, progress: p, page, port, previous, onAgain, onScan, onDelete }: {
   scan: ScanRow;
   report?: Report;
   items: Item[] | null;
@@ -34,8 +34,10 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
   port: number | null;
   previous?: Previous;
   onAgain: () => void;
+  onScan: (command: string) => void;
   onDelete: () => void;
 }) {
+  const range = isRange(scan);
   const open = items?.find((i) => i.port === port);
   if (open && items) return <Detail key={open.port} id={scan.id} item={open} items={sorted(items)} />;
 
@@ -67,7 +69,9 @@ export function ScanView({ scan, report, items, progress: p, page, port, previou
       )}
       {page === "changes"
         ? <Changes scan={scan} report={report} previous={previous} />
-        : items ? <Results id={scan.id} items={items} /> : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
+        : range && report ? <Hosts report={report} onScan={onScan} />
+        : !range && items ? <Results id={scan.id} items={items} />
+        : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
     </>
   );
 }
@@ -177,6 +181,10 @@ function Changes({ scan, report, previous }: { scan: ScanRow; report?: Report; p
   const keys = (r: Report) => new Set(r.findings.map(key));
   const opened = report.open_ports.filter((o) => !ports(before).has(o.port));
   const closed = before.open_ports.filter((o) => !ports(report).has(o.port));
+  const ips = (r: Report) => new Set((r.hosts ?? []).map((h) => h.ip));
+  const up = (report.hosts ?? []).filter((h) => !ips(before).has(h.ip));
+  const down = (before.hosts ?? []).filter((h) => !ips(report).has(h.ip));
+  const range = isRange(scan);
   const added = report.findings.filter((f) => !keys(before).has(key(f)));
   const gone = before.findings.filter((f) => !keys(report).has(key(f)));
   const portList = (id: string, list: Port[]) => (
@@ -200,15 +208,26 @@ function Changes({ scan, report, previous }: { scan: ScanRow; report?: Report; p
     <>
       <p className="lede">Compared with <a href={href(previous.scan.id)}>the scan from {new Date(previous.scan.created).toLocaleString()}</a></p>
       <div className="tally four">
-        <div className="tally-item bad"><b>{opened.length}</b><span>Ports opened</span></div>
-        <div className="tally-item ok"><b>{closed.length}</b><span>Ports closed</span></div>
+        {range ? (
+          <>
+            <div className="tally-item bad"><b>{up.length}</b><span>New hosts</span></div>
+            <div className="tally-item ok"><b>{down.length}</b><span>Hosts gone</span></div>
+          </>
+        ) : (
+          <>
+            <div className="tally-item bad"><b>{opened.length}</b><span>Ports opened</span></div>
+            <div className="tally-item ok"><b>{closed.length}</b><span>Ports closed</span></div>
+          </>
+        )}
         <div className="tally-item warn"><b>{added.length}</b><span>New findings</span></div>
         <div className="tally-item ok"><b>{gone.length}</b><span>Resolved findings</span></div>
       </div>
-      {opened.length + closed.length + added.length + gone.length === 0 ? (
+      {opened.length + closed.length + up.length + down.length + added.length + gone.length === 0 ? (
         <div className="card empty">Nothing changed</div>
       ) : (
         <div className="stack">
+          {up.length > 0 && <Card title="New hosts" sub={plural(up.length, "host")}><HostList hosts={up} /></Card>}
+          {down.length > 0 && <Card title="Hosts gone" sub={plural(down.length, "host")}><HostList hosts={down} /></Card>}
           {opened.length > 0 && <Card title="Ports opened" sub={plural(opened.length, "port")}>{portList(scan.id, opened)}</Card>}
           {closed.length > 0 && <Card title="Ports closed" sub={plural(closed.length, "port")}>{portList(previous.scan.id, closed)}</Card>}
           {added.length > 0 && <Card title="New findings" sub={plural(added.length, "finding")}>{findingList(added)}</Card>}
@@ -216,6 +235,54 @@ function Changes({ scan, report, previous }: { scan: ScanRow; report?: Report; p
         </div>
       )}
     </>
+  );
+}
+
+// isRange is whether a scan covers a range of addresses, `10.0.0.0/24`,
+// rather than one host.
+export function isRange(scan: ScanRow) {
+  return scan.target.includes("/");
+}
+
+// Hosts is a range scan's result: each host that answered with its open
+// ports, any one of which can be scanned in full, then the risky services
+// found among them.
+function Hosts({ report, onScan }: { report: Report; onScan: (command: string) => void }) {
+  const hosts = report.hosts ?? [];
+  const count = (s: Severity) => report.findings.filter((f) => f.severity === s).length;
+  return (
+    <>
+      <div className="tally four">
+        <div className="tally-item"><b>{hosts.length}</b><span>Hosts up</span></div>
+        <div className="tally-item"><b>{hosts.reduce((n, h) => n + h.open_ports.length, 0)}</b><span>Open ports</span></div>
+        <div className="tally-item bad"><b>{count("high")}</b><span>high</span></div>
+        <div className="tally-item warn"><b>{count("medium")}</b><span>medium</span></div>
+      </div>
+      <div className="stack">
+        {hosts.length === 0 ? <div className="card empty">No host in the range answered on a common port</div> : <HostList hosts={hosts} onScan={onScan} />}
+        {report.findings.length > 0 && (
+          <Card title="Findings" sub={plural(report.findings.length, "finding")}>
+            <ul className="findings">{report.findings.map((f, k) => <FindingRow key={k} finding={f} at />)}</ul>
+          </Card>
+        )}
+      </div>
+    </>
+  );
+}
+
+function HostList({ hosts, onScan }: { hosts: Host[]; onScan?: (command: string) => void }) {
+  return (
+    <ul className="card results">
+      {hosts.map((h) => (
+        <li key={h.ip}>
+          <div className="result host">
+            <span className="mono">{h.ip}</span>
+            <span className="port-chips">{h.open_ports.map((o) => <span key={o.port} className="port-chip" title={o.service}>{o.port} {o.service}</span>)}</span>
+            {onScan && <button type="button" className="btn" onClick={() => onScan("@ " + h.ip)}>Scan host</button>}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -344,7 +411,10 @@ function Step({ id, to, label, icon }: { id: string; to?: Item; label: string; i
 // path, for a list that mixes ports.
 function FindingRow({ finding: f, at }: { finding: Finding; at?: boolean }) {
   const port = /(?:^|\()port (\d+)/.exec(f.location)?.[1];
-  const where = [at && port ? "port " + port : "", path(f.location)].filter(Boolean).join(" ");
+  // A range's findings name their host before the port.
+  const head = f.location.split(" (port ")[0];
+  const host = at && !head.startsWith("http") && !head.startsWith("port") ? head : "";
+  const where = [host, at && port ? "port " + port : "", path(f.location)].filter(Boolean).join(" ");
   return (
     <li className="finding">
       <span className={"chip " + SEVERITY[f.severity]}>{f.severity}</span>

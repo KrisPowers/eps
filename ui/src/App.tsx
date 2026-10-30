@@ -4,7 +4,7 @@ import { Docs } from "./Docs";
 import { Settings } from "./Settings";
 import { Icon, type IconName } from "./Icon";
 import { go, href, readHash } from "./route";
-import { Card, results, ScanView, SEVERITY } from "./ScanView";
+import { Card, isRange, results, ScanView, SEVERITY } from "./ScanView";
 import type { Progress, Report, ScanRow, Severity } from "./types";
 
 // App is the frame every page sits in: a header with the search bar, help
@@ -122,7 +122,9 @@ export function App() {
               <hr className="nav-rule" />
               {selected && (
                 <>
-                  <NavItem to={href(selected.id)} icon="shield" label="Findings" on={page === "findings"} />
+                  {isRange(selected)
+                    ? <NavItem to={href(selected.id)} icon="devices" label="Hosts" on={page === "findings"} />
+                    : <NavItem to={href(selected.id)} icon="shield" label="Findings" on={page === "findings"} />}
                   <NavItem to={href(selected.id, "changes")} icon="difference" label="Changes" on={page === "changes"} />
                 </>
               )}
@@ -139,7 +141,7 @@ export function App() {
           {view === "scan" && selected && (
             <ScanView scan={selected} report={reports[selected.id]} items={items} progress={progress} page={page} port={port}
               previous={before && { scan: before, report: reports[before.id] }}
-              onAgain={() => start(selected.command || selected.target)} onDelete={() => remove(selected)} />
+              onAgain={() => start(selected.command || selected.target)} onScan={start} onDelete={() => remove(selected)} />
           )}
           {view === "scans" && <Home scans={scans} problem={problem} onScan={start} />}
         </main>
@@ -193,8 +195,14 @@ function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: st
               {s.status === "done" ? (
                 <>
                   <div className="stats">
-                    <div className="stat"><b>{s.open_ports}</b><span>Open ports</span></div>
-                    <div className="stat"><b>{s.endpoints}</b><span>Endpoints</span></div>
+                    {isRange(s) ? (
+                      <div className="stat"><b>{s.hosts ?? 0}</b><span>Hosts up</span></div>
+                    ) : (
+                      <>
+                        <div className="stat"><b>{s.open_ports}</b><span>Open ports</span></div>
+                        <div className="stat"><b>{s.endpoints}</b><span>Endpoints</span></div>
+                      </>
+                    )}
                     <div className="stat"><b>{Object.values(s.findings).reduce((n, c) => n + c, 0)}</b><span>Findings</span></div>
                   </div>
                   <div className="card-foot"><Severities counts={s.findings} /></div>

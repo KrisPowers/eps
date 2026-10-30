@@ -300,6 +300,9 @@ a.result:hover { background: var(--hover); }
 .result-what { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
 .result-meta { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap; }
 .result-go { color: var(--text-3); }
+.result.host { grid-template-columns: 140px minmax(0, 1fr) auto; padding-top: 10px; padding-bottom: 10px; }
+.port-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.port-chip { padding: 2px 8px; border-radius: 6px; background: var(--card-2); color: var(--text-2); font: 500 12px var(--mono); white-space: nowrap; }
 .port-num { font: 500 18px var(--mono); }
 .port-num small { margin-left: 1px; font-size: 12px; font-weight: 400; color: var(--text-3); }
 

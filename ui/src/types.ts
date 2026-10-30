@@ -62,6 +62,8 @@ export interface ScanRow {
   resolved_ip: string | null;
   open_ports: number;
   endpoints: number;
+  // For a range, the hosts that answered.
+  hosts?: number;
   findings: Record<Severity, number>;
   progress?: Progress;
 }
@@ -89,6 +91,13 @@ export interface Report {
   open_ports: Port[];
   endpoints: Endpoint[];
   findings: Finding[];
+  // For a range, each host that answered.
+  hosts?: Host[];
+}
+
+export interface Host {
+  ip: string;
+  open_ports: Port[];
 }
 
 export interface ScanDetail extends ScanRow {

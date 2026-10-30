@@ -5,6 +5,7 @@
 //! reported *open* when the connection completes, *filtered* when it times out,
 //! and otherwise *closed*.
 
+use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
@@ -99,6 +100,48 @@ pub async fn scan_ports_with(
         .collect();
     open.sort_by_key(|o| o.port);
     open
+}
+
+/// Probes `port_list` on every one of `ips`, up to `concurrency` at once,
+/// calling `on_probe` as each finishes. Returns the hosts with any open port,
+/// in address order, each with its open ports.
+pub async fn sweep(
+    ips: &[IpAddr],
+    port_list: &[u16],
+    concurrency: usize,
+    per_port_timeout: Duration,
+    on_probe: &(dyn Fn(IpAddr, u16, PortState) + Sync),
+) -> Vec<(IpAddr, Vec<OpenPort>)> {
+    let pairs = ips
+        .iter()
+        .flat_map(|ip| port_list.iter().map(move |port| (*ip, *port)));
+    let results = stream::iter(pairs)
+        .map(|(ip, port)| async move {
+            let state = probe(SocketAddr::new(ip, port), per_port_timeout).await;
+            on_probe(ip, port, state);
+            (ip, port, state)
+        })
+        .buffer_unordered(concurrency.max(1))
+        .collect::<Vec<_>>()
+        .await;
+
+    let mut hosts: BTreeMap<IpAddr, Vec<OpenPort>> = BTreeMap::new();
+    for (ip, port, state) in results {
+        if state == PortState::Open {
+            hosts.entry(ip).or_default().push(OpenPort {
+                port,
+                service: ports::service_name(port),
+                http_tls: ports::http_hint(port),
+            });
+        }
+    }
+    hosts
+        .into_iter()
+        .map(|(ip, mut open)| {
+            open.sort_by_key(|o| o.port);
+            (ip, open)
+        })
+        .collect()
 }
 
 /// Every TCP port, 1..=65535.
