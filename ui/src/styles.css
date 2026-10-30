@@ -302,6 +302,22 @@ a.result:hover { background: var(--hover); }
 .result-what { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
 .result-meta { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap; }
 .result-go { color: var(--text-3); }
+.result.history-row { grid-template-columns: 200px 110px 110px minmax(0, 1fr) 24px; }
+.result.history-row .result-meta { text-align: left; }
+.result.on { background: var(--accent-bg); color: var(--on-accent-bg); }
+.history-status { grid-column: 2 / 5; }
+
+/* Findings over time: a stacked bar per finished scan, high on top. */
+.trend { display: flex; align-items: flex-end; gap: 8px; height: 180px; padding: 0 24px 20px; overflow-x: auto; }
+.trend-bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; flex: 1 0 28px; max-width: 56px; height: 100%; color: var(--text-3); }
+.trend-stack { display: flex; flex-direction: column; width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; overflow: hidden; background: var(--line); transition: opacity .12s; }
+.trend-stack span { min-height: 2px; }
+.trend-stack .bad { background: var(--bad); }
+.trend-stack .warn { background: var(--warn); }
+.trend-stack .plain { background: var(--accent); }
+.trend-bar:hover .trend-stack { opacity: .8; }
+.trend-bar.on { color: var(--accent); font-weight: 500; }
+.trend-label { font-size: 11px; white-space: nowrap; }
 .result.host { grid-template-columns: 140px minmax(0, 1fr) auto; padding-top: 10px; padding-bottom: 10px; }
 .port-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .port-chip { padding: 2px 8px; border-radius: 6px; background: var(--card-2); color: var(--text-2); font: 500 12px var(--mono); white-space: nowrap; }

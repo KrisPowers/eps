@@ -55,7 +55,8 @@ the finished ones.
 Your scans are listed as cards. A scan opens on its **Findings**: a count per
 severity, then every open port, worst first. Each port opens its own page with
 the findings on it and its endpoints, with the same verdict blocks as the CLI.
-**Changes** compares it with the last scan of the same target: ports opened or
+**History** charts every kept scan of the same target. **Changes** compares it
+with the last scan of the same target: ports opened or
 closed, findings new or resolved. **Export** downloads it as JSON, Markdown or
 SARIF. Inside a scan, the sidebar's back button returns to the scans. While the scan
 runs, a pill carries the port being scanned, and each port shows as soon as it
