@@ -68,7 +68,7 @@ export function App() {
 
   if (selected?.progress) last.current[selected.id] = selected.progress;
   const progress = selected && (selected.progress ?? last.current[selected.id]);
-  const items = selected ? results(selected, reports[selected.id], progress) : null;
+  const items = selected ? results(reports[selected.id], progress) : null;
   const found = items?.flatMap((i) => (i.found ? [i.found] : [])) ?? [];
   const counts: Record<Page, number | undefined> = {
     ports: items?.length,

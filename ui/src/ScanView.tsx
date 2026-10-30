@@ -9,7 +9,7 @@ export type Item = Port & { state: "waiting" | "checking" | "done" };
 
 // results is a scan's open ports: from its report once it has one, from its
 // progress once the sweep is over, none before.
-export function results(scan: ScanRow, report: Report | undefined, p: Progress | undefined): Item[] | null {
+export function results(report: Report | undefined, p: Progress | undefined): Item[] | null {
   if (report) return fromReport(report);
   if (p && (p.phase === "endpoints" || p.phase === "done")) return fromProgress(p);
   return null;
