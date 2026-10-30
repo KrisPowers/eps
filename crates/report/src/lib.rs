@@ -4,6 +4,9 @@
 //! whether a given host is meant to be public. Severities reflect potential
 //! impact so an engineer can triage quickly; the decision is theirs.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use endpoints::tls::{Cert, TlsReport};
 use endpoints::{AuthState, Endpoint, ServiceReport};
 use scanner::scan::OpenPort;
 use serde::Serialize;
@@ -48,6 +51,43 @@ pub struct PortView {
     /// What the service said first on connect, such as its version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub banner: Option<String>,
+    /// For HTTPS, its certificate and any old TLS versions it accepts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<TlsView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TlsView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cert: Option<CertView>,
+    pub legacy: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CertView {
+    pub subject: String,
+    pub issuer: String,
+    /// Unix seconds.
+    pub not_before: i64,
+    pub not_after: i64,
+    pub names: Vec<String>,
+    pub self_signed: bool,
+}
+
+impl From<&TlsReport> for TlsView {
+    fn from(t: &TlsReport) -> Self {
+        TlsView {
+            cert: t.cert.as_ref().map(|c: &Cert| CertView {
+                subject: c.subject.clone(),
+                issuer: c.issuer.clone(),
+                not_before: c.not_before,
+                not_after: c.not_after,
+                names: c.names.clone(),
+                self_signed: c.self_signed,
+            }),
+            legacy: t.legacy.iter().map(|v| v.to_string()).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -131,6 +171,10 @@ pub fn build_findings(open_ports: &[OpenPort], services: &[ServiceReport]) -> Ve
             findings.extend(endpoint_findings(svc, ep));
         }
 
+        if let Some(tls) = &svc.tls {
+            findings.extend(tls_findings(svc.port, tls, now()));
+        }
+
         // Cleartext transport note, raised once per plaintext service that has
         // any openly reachable endpoint.
         if svc.reachable
@@ -148,6 +192,67 @@ pub fn build_findings(open_ports: &[OpenPort], services: &[ServiceReport]) -> Ve
 
     findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
     findings
+}
+
+fn now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+/// What an HTTPS service's TLS is worth flagging at `now`: a certificate
+/// that has expired, expires within 30 days or signed itself, and old
+/// protocol versions still accepted.
+fn tls_findings(port: u16, tls: &TlsReport, now: i64) -> Vec<Finding> {
+    let mut out = Vec::new();
+    let loc = format!("port {port} (https)");
+    if let Some(c) = &tls.cert {
+        let days = (c.not_after - now) / 86_400;
+        if c.not_after < now {
+            out.push(Finding {
+                severity: Severity::Medium,
+                title: "Expired TLS certificate".to_string(),
+                location: loc.clone(),
+                detail: format!(
+                    "The certificate for {} expired {} days ago, so clients refuse it. Renew it.",
+                    c.subject, -days
+                ),
+            });
+        } else if days < 30 {
+            out.push(Finding {
+                severity: Severity::Low,
+                title: "TLS certificate expires soon".to_string(),
+                location: loc.clone(),
+                detail: format!(
+                    "The certificate for {} expires in {days} days. Renew it before then.",
+                    c.subject
+                ),
+            });
+        }
+        if c.self_signed {
+            out.push(Finding {
+                severity: Severity::Low,
+                title: "Self-signed TLS certificate".to_string(),
+                location: loc.clone(),
+                detail: format!(
+                    "{} issued its own certificate, so clients can't verify who they're talking to. Use one from a certificate authority, or a private CA your clients trust.",
+                    c.subject
+                ),
+            });
+        }
+    }
+    if !tls.legacy.is_empty() {
+        out.push(Finding {
+            severity: Severity::Medium,
+            title: "Legacy TLS accepted".to_string(),
+            location: loc,
+            detail: format!(
+                "Accepts {}, deprecated and open to downgrade attacks. Require TLS 1.2 or newer.",
+                tls.legacy.join(" and ")
+            ),
+        });
+    }
+    out
 }
 
 fn endpoint_findings(svc: &ServiceReport, ep: &Endpoint) -> Vec<Finding> {
@@ -239,6 +344,11 @@ pub fn assemble(
             port: o.port,
             service: o.service.to_string(),
             banner: None,
+            tls: services
+                .iter()
+                .find(|s| s.port == o.port)
+                .and_then(|s| s.tls.as_ref())
+                .map(TlsView::from),
         })
         .collect();
 
@@ -304,6 +414,7 @@ mod tests {
             scheme: "http".to_string(),
             reachable: true,
             endpoints: vec![open_ep("/actuator/env", true, 200)],
+            tls: None,
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.iter().any(|x| x.severity == Severity::High));
@@ -331,8 +442,36 @@ mod tests {
                 open_ep("/actuator/env", true, 200),
                 open_ep("/api", false, 200),
             ],
+            tls: None,
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.windows(2).all(|w| w[0].severity >= w[1].severity));
+    }
+
+    fn tls(not_after: i64, self_signed: bool, legacy: Vec<&'static str>) -> TlsReport {
+        TlsReport {
+            cert: Some(Cert {
+                subject: "api.example".to_string(),
+                issuer: "Example CA".to_string(),
+                not_before: 0,
+                not_after,
+                names: Vec::new(),
+                self_signed,
+            }),
+            legacy,
+        }
+    }
+
+    #[test]
+    fn tls_findings_by_state() {
+        let now = 1_000_000_000;
+        assert!(tls_findings(443, &tls(now + 90 * 86_400, false, vec![]), now).is_empty());
+        let expired = tls_findings(443, &tls(now - 86_400, false, vec![]), now);
+        assert_eq!(expired[0].title, "Expired TLS certificate");
+        let soon = tls_findings(443, &tls(now + 5 * 86_400, false, vec![]), now);
+        assert_eq!(soon[0].severity, Severity::Low);
+        let weak = tls_findings(443, &tls(now + 90 * 86_400, true, vec!["TLS 1.0"]), now);
+        assert_eq!(weak.len(), 2);
+        assert!(weak.iter().all(|f| f.location == "port 443 (https)"));
     }
 }

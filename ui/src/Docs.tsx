@@ -20,8 +20,8 @@ const CONTROLS: [string, string][] = [
 
 const SEVERITIES: [string, string, string][] = [
   ["high", "bad", "A sensitive endpoint open without auth, such as /actuator/env, /.env or /.git/HEAD, or a high-risk service exposed: Redis, MongoDB, a database, the Docker API, etcd, kubelet."],
-  ["medium", "warn", "Exposed services like RDP, VNC, SMB, FTP or message brokers."],
-  ["low", "plain", "Cleartext HTTP carrying open endpoints, open APIs with no rate-limit headers, no throttling under a burst."],
+  ["medium", "warn", "Exposed services like RDP, VNC, SMB, FTP or message brokers; an expired TLS certificate; TLS 1.0 or 1.1 still accepted."],
+  ["low", "plain", "Cleartext HTTP carrying open endpoints, open APIs with no rate-limit headers, no throttling under a burst, a self-signed certificate or one expiring within 30 days."],
   ["info", "ok", "Good signs, such as a sensitive path correctly behind auth."],
 ];
 
@@ -60,6 +60,7 @@ export function Docs() {
         <h2>Reading a scan</h2>
         <p>A scan opens on its <b>Findings</b>: how many of each severity it found, then every open port, worst first. Open a port for its own page, with the findings on it and the endpoints it serves.</p>
         <p>A port's results show as soon as it is done, while the rest are still being checked. Services that speak first on connect, such as SSH, FTP, SMTP and MySQL, show what they said under their name, often their version.</p>
+        <p>An HTTPS port's page shows its certificate: who it names, who issued it, the dates it is good for and the names it covers, and whether the port still accepts TLS 1.0 or 1.1.</p>
         <p><b>Changes</b> compares a finished scan with the last finished scan of the same target: ports that opened or closed, findings that are new or resolved.</p>
         <p><b>Export</b> downloads a finished scan as JSON, the same report <code>--json</code> prints; Markdown, to paste into a ticket; or SARIF, for code-scanning tools such as GitHub's.</p>
       </section>

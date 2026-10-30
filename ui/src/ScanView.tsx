@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { download, FORMATS } from "./export";
 import { Icon } from "./Icon";
 import { href, type Page } from "./route";
-import type { Endpoint, Finding, Port, Posture, Progress, Report, ScanRow, Severity } from "./types";
+import type { Endpoint, Finding, Port, Posture, Progress, Report, ScanRow, Severity, Tls } from "./types";
 
 // A port as the page draws it: waiting its turn, being checked, or done with
 // what it turned out to expose.
@@ -268,6 +268,7 @@ function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) 
               ? <ul className="findings">{[...f.findings].sort((a, b) => LEVELS.indexOf(a.severity) - LEVELS.indexOf(b.severity)).map((x, k) => <FindingRow key={k} finding={x} />)}</ul>
               : <div className="empty">No findings on this port</div>}
           </Card>
+          {item.tls && <TlsCard tls={item.tls} />}
           <Card title="Endpoints" sub={plural(f.endpoints.length, "endpoint")} action={f.endpoints.length > 0 && <Legend />}>
             {f.endpoints.length
               ? <EndpointsTable endpoints={f.endpoints} />
@@ -276,6 +277,44 @@ function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) 
         </div>
       )}
     </>
+  );
+}
+
+// TlsCard is an HTTPS port's certificate: who it names and who issued it,
+// how long it is good for, the names it covers, and any old TLS versions
+// the port still accepts.
+function TlsCard({ tls }: { tls: Tls }) {
+  const c = tls.cert;
+  const left = c ? Math.floor((c.not_after * 1000 - Date.now()) / 86_400_000) : 0;
+  const day = (s: number) => new Date(s * 1000).toLocaleDateString();
+  return (
+    <Card title="TLS" sub={c ? c.subject : "Certificate not readable"}>
+      <dl className="facts-list">
+        {c && (
+          <>
+            <dt>Issued by</dt>
+            <dd>{c.issuer}{c.self_signed && <span className="chip warn">Self-signed</span>}</dd>
+            <dt>Valid</dt>
+            <dd>
+              {day(c.not_before)} to {day(c.not_after)}
+              <span className={"chip " + (left < 0 ? "bad" : left < 30 ? "warn" : "ok")}>{left < 0 ? `Expired ${-left} days ago` : `${left} days left`}</span>
+            </dd>
+            {c.names.length > 0 && (
+              <>
+                <dt>Covers</dt>
+                <dd className="chips">{c.names.map((n) => <code key={n} className="command-line">{n}</code>)}</dd>
+              </>
+            )}
+          </>
+        )}
+        <dt>Protocols</dt>
+        <dd>
+          {tls.legacy.length
+            ? tls.legacy.map((v) => <span key={v} className="chip bad">{v} accepted</span>)
+            : <span className="chip ok">No TLS 1.0 or 1.1</span>}
+        </dd>
+      </dl>
+    </Card>
   );
 }
 

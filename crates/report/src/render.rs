@@ -1,5 +1,5 @@
 //! Terminal rendering of a report: a summary card up top, the open ports,
-//! then one card per endpoint with a color-coded verdict for each security
+//! each HTTPS service's certificate, then one card per endpoint with a color-coded verdict for each security
 //! control.
 
 use std::io::IsTerminal;
@@ -302,6 +302,51 @@ fn port_section(paint: Paint, report: &Report, out: &mut String) {
     }
 }
 
+/// Unix seconds as a `YYYY-MM-DD` date, by Howard Hinnant's civil calendar
+/// algorithm.
+fn date(secs: i64) -> String {
+    let z = secs.div_euclid(86_400) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// Each HTTPS service's certificate, and any old TLS versions it accepts.
+fn tls_section(paint: Paint, report: &Report, out: &mut String) {
+    for p in &report.open_ports {
+        let Some(tls) = &p.tls else { continue };
+        heading(paint, "TLS", &format!("port {}", p.port), out);
+        if let Some(c) = &tls.cert {
+            let mut row = Row::new(paint);
+            row.add("1", &fit(&c.subject, WIDTH / 2));
+            row.add(ACCENT, &fit(&format!("  issued by {}", c.issuer), WIDTH / 2));
+            row.finish(out);
+            let mut row = Row::new(paint);
+            row.add("", &format!("valid {} to {}", date(c.not_before), date(c.not_after)));
+            if c.self_signed {
+                row.add("1;33", "  self-signed");
+            }
+            row.finish(out);
+            if !c.names.is_empty() {
+                let mut row = Row::new(paint);
+                row.add(ACCENT, &fit(&c.names.join(", "), WIDTH));
+                row.finish(out);
+            }
+        }
+        if !tls.legacy.is_empty() {
+            let mut row = Row::new(paint);
+            row.add("1;33", &format!("accepts {}", tls.legacy.join(" and ")));
+            row.finish(out);
+        }
+    }
+}
+
 /// One HTTP service: a legend, then a line per endpoint with its status, a
 /// colored block for each security control, its path and note.
 fn endpoint_section(paint: Paint, svc: &ServiceReport, out: &mut String) {
@@ -365,6 +410,7 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
     if port.is_none() {
         port_section(paint, report, &mut out);
     }
+    tls_section(paint, report, &mut out);
 
     let served: Vec<&ServiceReport> = services
         .iter()
@@ -397,6 +443,13 @@ mod tests {
         row.pad_to(5);
         assert_eq!(row.width, 5);
         assert_eq!(row.text, "\x1b[1mab\x1b[0m   ");
+    }
+
+    #[test]
+    fn dates_from_unix_seconds() {
+        assert_eq!(date(0), "1970-01-01");
+        assert_eq!(date(1_906_545_600), "2030-06-01");
+        assert_eq!(date(951_782_400), "2000-02-29");
     }
 
     #[test]

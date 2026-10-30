@@ -11,8 +11,25 @@ export interface Port {
   service: string;
   // What the service said first on connect, such as its version.
   banner?: string | null;
+  // For HTTPS, its certificate and any old TLS versions it accepts.
+  tls?: Tls | null;
   // While a scan runs: what the port exposes, once it is done.
   found?: Found | null;
+}
+
+export interface Tls {
+  cert?: Cert;
+  legacy: string[];
+}
+
+export interface Cert {
+  subject: string;
+  issuer: string;
+  // Unix seconds.
+  not_before: number;
+  not_after: number;
+  names: string[];
+  self_signed: boolean;
 }
 
 export interface Found {
