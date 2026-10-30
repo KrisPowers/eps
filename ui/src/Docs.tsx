@@ -59,7 +59,7 @@ export function Docs() {
       <section className="card doc">
         <h2>Reading a scan</h2>
         <p>A scan opens on its <b>Findings</b>: how many of each severity it found, then every open port, worst first. Open a port for its own page, with the findings on it and the endpoints it serves.</p>
-        <p>A port's results show as soon as it is done, while the rest are still being checked.</p>
+        <p>A port's results show as soon as it is done, while the rest are still being checked. Services that speak first on connect, such as SSH, FTP, SMTP and MySQL, show what they said under their name, often their version.</p>
         <p><b>Changes</b> compares a finished scan with the last finished scan of the same target: ports that opened or closed, findings that are new or resolved.</p>
         <p><b>Export</b> downloads a finished scan as JSON, the same report <code>--json</code> prints; Markdown, to paste into a ticket; or SARIF, for code-scanning tools such as GitHub's.</p>
       </section>

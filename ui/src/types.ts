@@ -9,6 +9,8 @@ export type Posture = "configured" | "insecure" | "missing" | "unknown";
 export interface Port {
   port: number;
   service: string;
+  // What the service said first on connect, such as its version.
+  banner?: string | null;
   // While a scan runs: what the port exposes, once it is done.
   found?: Found | null;
 }

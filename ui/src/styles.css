@@ -295,6 +295,7 @@ a.result:hover { background: var(--hover); }
 .results li + li .result { box-shadow: inset 0 1px 0 var(--line); }
 .result.waiting { color: var(--text-3); }
 .result-service { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-service small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--text-3); }
 .result.waiting .result-service { color: inherit; }
 .result-what { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
 .result-meta { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap; }

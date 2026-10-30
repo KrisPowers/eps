@@ -12,6 +12,7 @@ mod cli;
 mod progress;
 mod serve;
 
+use std::collections::HashMap;
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -143,6 +144,18 @@ pub(crate) async fn scan_target(
     )
     .await;
 
+    // What each service says first on connect, read from every open port at
+    // once, so the silent ones cost one wait between them.
+    let open: Vec<u16> = open_ports.iter().map(|op| op.port).collect();
+    let banners: HashMap<u16, String> =
+        scanner::banner::grab_all(ip, &open, 64, opts.connect_timeout)
+            .await
+            .into_iter()
+            .collect();
+    for (port, text) in &banners {
+        progress.banner(*port, text);
+    }
+
     // What one port exposes, its endpoints and findings, goes into
     // `progress` as soon as nothing more is coming for it.
     let rendered_ip = ip.to_string();
@@ -183,7 +196,10 @@ pub(crate) async fn scan_target(
         reports
     };
 
-    let report = report::assemble(&target.host, &rendered_ip, &open_ports, &services);
+    let mut report = report::assemble(&target.host, &rendered_ip, &open_ports, &services);
+    for p in &mut report.open_ports {
+        p.banner = banners.get(&p.port).cloned();
+    }
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {
         report,

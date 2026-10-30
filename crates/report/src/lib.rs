@@ -45,6 +45,9 @@ pub struct Report {
 pub struct PortView {
     pub port: u16,
     pub service: String,
+    /// What the service said first on connect, such as its version.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub banner: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -235,6 +238,7 @@ pub fn assemble(
         .map(|o| PortView {
             port: o.port,
             service: o.service.to_string(),
+            banner: None,
         })
         .collect();
 
