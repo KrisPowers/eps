@@ -27,8 +27,13 @@ function markdown(r: Report, when: number) {
   const out = [`# ${r.target}`, "", `${r.resolved_ip}, scanned ${new Date(when).toLocaleString()}`, ""];
   out.push("## Summary", "", "| Severity | Findings |", "| --- | --- |");
   for (const s of LEVELS) out.push(`| ${s} | ${r.findings.filter((f) => f.severity === s).length} |`);
-  out.push("", `${r.open_ports.length} open ports, ${r.endpoints.length} endpoints.`, "");
+  out.push("", r.hosts ? `${r.hosts.length} hosts up.` : `${r.open_ports.length} open ports, ${r.endpoints.length} endpoints.`, "");
 
+  if (r.hosts?.length) {
+    out.push("## Hosts", "", "| Host | Open ports |", "| --- | --- |");
+    for (const h of r.hosts) out.push(`| ${h.ip} | ${h.open_ports.map((p) => `${p.port}/${cell(p.service)}`).join(", ")} |`);
+    out.push("");
+  }
   if (r.open_ports.length) {
     out.push("## Open ports", "", "| Port | Service |", "| --- | --- |");
     for (const p of r.open_ports) out.push(`| ${p.port}/tcp | ${cell(p.service)} |`);
@@ -63,9 +68,11 @@ function sarif(r: Report) {
     return id;
   };
   const results = r.findings.map((f) => {
-    const url = f.location.split(" (port ")[0];
+    // `<url> (port N)`, `port N`, or for a range `<ip> (port N)`.
+    const head = f.location.split(" (port ")[0];
     const port = /(?:^|\()port (\d+)/.exec(f.location)?.[1];
-    const uri = url.startsWith("http") ? url : `tcp://${r.target}${port ? ":" + port : ""}`;
+    const host = head.startsWith("port") ? r.target : head;
+    const uri = head.startsWith("http") ? head : `tcp://${host}${port ? ":" + port : ""}`;
     return {
       ruleId: ruleOf(f.title),
       level: SARIF_LEVEL[f.severity],

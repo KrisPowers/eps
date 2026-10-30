@@ -338,13 +338,17 @@ fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
 
     let mut counts = Row::new(paint);
     counts.add(ACCENT, "│ ");
-    if port.is_none() {
+    if is_range(report) {
+        counts.add("", &plural(report.hosts.len(), "host up", "hosts up"));
+    } else if port.is_none() {
         let ports = plural(report.open_ports.len(), "open port", "open ports");
         counts.add("", &ports);
         counts.add(ACCENT, "  ·  ");
     }
-    let endpoints = plural(report.endpoints.len(), "endpoint", "endpoints");
-    counts.add("", &endpoints);
+    if !is_range(report) {
+        let endpoints = plural(report.endpoints.len(), "endpoint", "endpoints");
+        counts.add("", &endpoints);
+    }
     counts.pad_to(WIDTH - 2);
     counts.add(ACCENT, " │");
     counts.finish(out);
@@ -352,6 +356,32 @@ fn card(paint: Paint, report: &Report, port: Option<u16>, out: &mut String) {
     let mut bottom = Row::new(paint);
     bottom.add(ACCENT, &format!("└{rule}┘"));
     bottom.finish(out);
+}
+
+/// Whether the report is of a range of addresses rather than one host.
+fn is_range(report: &Report) -> bool {
+    report.target.contains('/')
+}
+
+/// Each host in a range that answered, with its open ports.
+fn host_section(paint: Paint, report: &Report, out: &mut String) {
+    heading(paint, "HOSTS", "", out);
+    if report.hosts.is_empty() {
+        notice(paint, "No host in the range answered on a common port.", out);
+        return;
+    }
+    for h in &report.hosts {
+        let mut row = Row::new(paint);
+        row.add("1", &h.ip);
+        row.pad_to(18);
+        let ports: Vec<String> = h
+            .open_ports
+            .iter()
+            .map(|p| format!("{}/{}", p.port, p.service))
+            .collect();
+        row.add("", &fit(&ports.join("  "), WIDTH - 18));
+        row.finish(out);
+    }
 }
 
 /// Open ports, with risky services highlighted and the reason beside, and
@@ -490,6 +520,10 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
     let paint = Paint::detect();
     let mut out = String::from("\n");
     card(paint, report, port, &mut out);
+    if is_range(report) {
+        host_section(paint, report, &mut out);
+        return out;
+    }
     if port.is_none() {
         port_section(paint, report, &mut out);
     }

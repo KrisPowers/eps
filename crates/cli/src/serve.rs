@@ -102,6 +102,7 @@ impl Scan {
             "resolved_ip": report.and_then(|r| r["resolved_ip"].as_str()),
             "open_ports": count("open_ports"),
             "endpoints": count("endpoints"),
+            "hosts": count("hosts"),
             "findings": { "high": high, "medium": medium, "low": low, "info": info },
         })
     }

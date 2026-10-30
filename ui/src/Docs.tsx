@@ -47,6 +47,7 @@ export function Docs() {
           <li><code>192.168.1.10:8080</code><span>one port only</span></li>
           <li><code>[2001:db8::1]:443</code><span>IPv6, bracketed when a port is attached</span></li>
           <li><code>api.internal --no-discovery</code><span>with any of the options below</span></li>
+          <li><code>192.168.1.0/24</code><span>a range, up to a /20: the common ports on every address, to find the hosts that are up</span></li>
         </ul>
         <p>An empty line scans this computer. Focused, the bar lists your recent scans, narrowed to what you type; <kbd>Ctrl+K</kbd> focuses it from anywhere.</p>
       </section>
@@ -70,6 +71,7 @@ export function Docs() {
         <p>A scan opens on its <b>Findings</b>: how many of each severity it found, then every open port, worst first. Open a port for its own page, with the findings on it and the endpoints it serves.</p>
         <p>A port's results show as soon as it is done, while the rest are still being checked. Services that speak first on connect, such as SSH, FTP, SMTP and MySQL, show what they said under their name, often their version.</p>
         <p>An HTTPS port's page shows its certificate: who it names, who issued it, the dates it is good for and the names it covers, and whether the port still accepts TLS 1.0 or 1.1.</p>
+        <p>A range opens on its <b>Hosts</b>: each host that answered, with its open ports. <b>Scan host</b> scans one of them in full.</p>
         <p><b>Changes</b> compares a finished scan with the last finished scan of the same target: ports that opened or closed, findings that are new or resolved.</p>
         <p><b>Export</b> downloads a finished scan as JSON, the same report <code>--json</code> prints; Markdown, to paste into a ticket; or SARIF, for code-scanning tools such as GitHub's.</p>
       </section>

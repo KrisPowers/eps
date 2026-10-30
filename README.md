@@ -121,7 +121,13 @@ cp target/release/portscan ~/.local/bin/@   # or anywhere on your PATH
 @ 192.168.1.10:8080       # inspect a single pinned port
 @ api.internal --json     # machine-readable output for pipelines/CI
 @ 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
+@ 192.168.1.0/24          # a range: which hosts are up, on the common ports
 ```
+
+A range (IPv4, up to a /20) probes the catalog's common ports on every address
+and reports each host that answered with its open ports, plus any risky
+services among them. It skips the HTTP phase; scan a host it finds on its own
+for that.
 
 IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
 `2001:db8::1` on its own. Hostnames are resolved via the system resolver.

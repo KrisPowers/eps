@@ -4,6 +4,7 @@
 //! whether a given host is meant to be public. Severities reflect potential
 //! impact so an engineer can triage quickly; the decision is theirs.
 
+use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use endpoints::tls::{Cert, TlsReport};
@@ -42,6 +43,15 @@ pub struct Report {
     pub open_ports: Vec<PortView>,
     pub endpoints: Vec<EndpointView>,
     pub findings: Vec<Finding>,
+    /// For a range, each host that answered, with its open ports.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hosts: Vec<HostView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HostView {
+    pub ip: String,
+    pub open_ports: Vec<PortView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -471,6 +481,43 @@ pub fn assemble(
         open_ports: open_ports_view,
         endpoints,
         findings,
+        hosts: Vec::new(),
+    }
+}
+
+/// Assemble the report of a range: each host that answered with its open
+/// ports, and the risky services among them, located by host and port.
+pub fn assemble_range(target: &str, hosts: &[(IpAddr, Vec<OpenPort>)]) -> Report {
+    let mut findings = Vec::new();
+    let mut views = Vec::new();
+    for (ip, open) in hosts {
+        for f in build_findings(open, &[]) {
+            findings.push(Finding {
+                location: format!("{ip} ({})", f.location),
+                ..f
+            });
+        }
+        views.push(HostView {
+            ip: ip.to_string(),
+            open_ports: open
+                .iter()
+                .map(|o| PortView {
+                    port: o.port,
+                    service: o.service.to_string(),
+                    banner: None,
+                    tls: None,
+                })
+                .collect(),
+        });
+    }
+    findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
+    Report {
+        target: target.to_string(),
+        resolved_ip: target.to_string(),
+        open_ports: Vec::new(),
+        endpoints: Vec::new(),
+        findings,
+        hosts: views,
     }
 }
 
@@ -565,6 +612,19 @@ mod tests {
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.windows(2).all(|w| w[0].severity >= w[1].severity));
+    }
+
+    #[test]
+    fn range_findings_name_the_host() {
+        let redis = OpenPort {
+            port: 6379,
+            service: "redis",
+            http_tls: None,
+        };
+        let ip: IpAddr = "10.0.0.5".parse().unwrap();
+        let r = assemble_range("10.0.0.0/24", &[(ip, vec![redis])]);
+        assert_eq!(r.hosts.len(), 1);
+        assert_eq!(r.findings[0].location, "10.0.0.5 (port 6379)");
     }
 
     fn tls(not_after: i64, self_signed: bool, legacy: Vec<&'static str>) -> TlsReport {

@@ -13,6 +13,7 @@ mod progress;
 mod serve;
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -109,6 +110,10 @@ pub(crate) async fn scan_target(
     opts: &ScanOptions,
     progress: &Progress,
 ) -> anyhow::Result<ScanOutput> {
+    if let Some(ips) = scanner::target::range(&opts.target) {
+        let ips = ips.map_err(|e| anyhow::anyhow!(e))?;
+        return Ok(scan_range(opts, progress, &ips).await);
+    }
     let target = Target::parse(&opts.target).map_err(|e| anyhow::anyhow!(e))?;
     progress.set_phase(Phase::Resolving);
 
@@ -206,6 +211,24 @@ pub(crate) async fn scan_target(
         services,
         pinned: target.port,
     })
+}
+
+/// Scans a range: the catalog's ports on every address in it, to find the
+/// hosts that are up and what they serve. There is no HTTP inspection; a
+/// host found this way can be scanned on its own.
+async fn scan_range(opts: &ScanOptions, progress: &Progress, ips: &[IpAddr]) -> ScanOutput {
+    let ports = scanner::ports::catalog();
+    progress.start_ports(&opts.target, ips.len() * ports.len());
+    let on_probe = |_: IpAddr, port: u16, _: scan::PortState| progress.port_done(port, false);
+    let hosts = scan::sweep(ips, &ports, opts.concurrency, opts.connect_timeout, &on_probe).await;
+    let target = opts.target.trim_start_matches('@').trim();
+    let report = report::assemble_range(target, &hosts);
+    progress.set_phase(Phase::Done);
+    ScanOutput {
+        report,
+        services: Vec::new(),
+        pinned: None,
+    }
 }
 
 fn build_http_config(opts: &ScanOptions) -> HttpConfig {
