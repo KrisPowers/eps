@@ -36,15 +36,20 @@ curl -fsSL https://raw.githubusercontent.com/KrisPowers/portscan/main/compose.ya
 docker compose up -d
 ```
 
-Then open <http://localhost:8090>. The search bar in the middle of the page is the
-`@` command line: type what you'd type after `@` in a terminal, such as
-`192.168.1.10:8080` or `api.internal --no-discovery --probe-rate-limit`, and press
-Enter. The CLI's options all work there except `--paths` and `--serve`; an empty
-line scans this computer. Focused, the bar lists your recent scans, narrowed to
-what you type. Once a scan starts, the bar moves into a header and the loading bar
-carries the port being scanned. Then the open ports show as a catalog of tiles,
-each opening the port's own page, with its findings and endpoints on tabs, as
-soon as that port is done; each endpoint has the same verdict blocks as the CLI. The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,
+Then open <http://localhost:8090>. The search bar in the header is the `@` command
+line: type what you'd type after `@` in a terminal, such as `192.168.1.10:8080` or
+`api.internal --no-discovery --probe-rate-limit`, and press Enter. The CLI's
+options all work there except `--paths` and `--serve`; an empty line scans this
+computer. Focused, the bar lists your recent scans, narrowed to what you type.
+The `?` beside it opens the docs, and the theme button picks light, dark or the
+system's setting.
+
+The sidebar holds the scans and, for the one open, its pages: **Ports**, a catalog
+of tiles, each opening the port's own page with its findings and endpoints on
+tabs; **Endpoints**, every endpoint on any port, with the same verdict blocks as
+the CLI; and **Findings**, everything found, worst first. While the scan runs, a
+pill carries the port being scanned, and each port shows as soon as it is done.
+The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,
 `./portscan/data` next to `compose.yaml` elsewhere.
 
 - **This computer only.** The dashboard has no sign-in, so it's published on
