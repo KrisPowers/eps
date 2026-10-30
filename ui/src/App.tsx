@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
 import { api } from "./api";
-import { Docs } from "./Docs";
+import { DOCS, Docs } from "./Docs";
 import { withDefaults } from "./prefs";
-import { Settings } from "./Settings";
+import { SETTINGS, Settings } from "./Settings";
 import { Icon, type IconName } from "./Icon";
 import { go, href, readHash } from "./route";
 import { Card, isRange, results, ScanView, SEVERITY } from "./ScanView";
@@ -14,7 +14,7 @@ export function App() {
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [reports, setReports] = useState<Record<string, Report>>({});
   const [route, setRoute] = useState(readHash);
-  const { id, view, page, port } = route;
+  const { id, view, page, port, section } = route;
   const [problem, setProblem] = useState("");
   const [toast, setToast] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -140,15 +140,23 @@ export function App() {
                 </>
               )}
             </>
+          ) : view === "docs" || view === "settings" ? (
+            <>
+              <a className="nav-back" href="#/"><Icon name="arrow_back" /><span>All scans</span></a>
+              <hr className="nav-rule" />
+              {(view === "docs" ? DOCS : SETTINGS).map(([key, label, icon], i) => (
+                <NavItem key={key} to={`#/${view}/${key}`} icon={icon} label={label} on={section === key || (!section && i === 0)} />
+              ))}
+            </>
           ) : (
             <NavItem to="#/" icon="history" label="Scans" on={view === "scans"} />
           )}
         </nav>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
-        <main className="page" key={view + id + "/" + page + (port ?? "")}>
-          {view === "docs" && <Docs />}
-          {view === "settings" && <Settings scans={scans} onChanged={load} />}
+        <main className="page" key={view + id}>
+          {view === "docs" && <Docs section={section} />}
+          {view === "settings" && <Settings section={section} scans={scans} onChanged={load} />}
           {view === "scan" && selected && (
             <ScanView scan={selected} report={reports[selected.id]} items={items} progress={progress} page={page} port={port}
               previous={before && { scan: before, report: reports[before.id] }}
