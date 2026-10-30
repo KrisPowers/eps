@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Icon } from "./Icon";
-import { href, type Page } from "./route";
+import { href } from "./route";
 import type { Endpoint, Finding, Port, Posture, Progress, Report, ScanRow, Severity } from "./types";
 
 // A port as the page draws it: waiting its turn, being checked, or done with
@@ -15,29 +15,21 @@ export function results(report: Report | undefined, p: Progress | undefined): It
   return null;
 }
 
-// ScanView is one page of a scan under its heading: the sweep while it
-// runs, then the open ports as cards, each with a page of its own, or every
-// endpoint grouped by port, or every finding grouped by severity. A port can
-// be opened as soon as it is done, while the rest are still being checked.
-export function ScanView({ scan, items, progress: p, page, port, onAgain, onDelete }: {
+// ScanView is a scan: its findings, one result per open port, worst first,
+// or, with a port picked, that port's own page.
+export function ScanView({ scan, items, progress: p, port, onAgain, onDelete }: {
   scan: ScanRow;
   items: Item[] | null;
   progress?: Progress;
-  page: Page;
   port: number | null;
   onAgain: () => void;
   onDelete: () => void;
 }) {
+  const open = items?.find((i) => i.port === port);
+  if (open && items) return <Detail key={open.port} id={scan.id} item={open} items={sorted(items)} />;
+
   const going = scan.status === "queued" || scan.status === "running";
   const ip = scan.resolved_ip ?? p?.ip;
-  const open = items?.find((i) => i.port === port);
-
-  let body = null;
-  if (!items) body = going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null;
-  else if (page === "ports") body = open ? <PortPage key={open.port} id={scan.id} item={open} items={items} /> : <Catalog id={scan.id} items={items} />;
-  else if (page === "endpoints") body = <Endpoints id={scan.id} items={items} going={going} />;
-  else body = <Findings id={scan.id} items={items} going={going} />;
-
   return (
     <>
       <div className="page-head">
@@ -46,7 +38,7 @@ export function ScanView({ scan, items, progress: p, page, port, onAgain, onDele
           <div className="page-sub">
             {ip && ip !== scan.target && <span className="mono">{ip}</span>}
             {/ --?[a-z]/.test(scan.command) && <code className="command-line">{scan.command}</code>}
-            <Facts scan={scan} items={items} progress={going ? p : undefined} />
+            <Status scan={scan} progress={going ? p : undefined} />
           </div>
         </div>
         <div className="page-actions">
@@ -61,28 +53,155 @@ export function ScanView({ scan, items, progress: p, page, port, onAgain, onDele
       {scan.status === "failed" && (
         <div className="callout bad"><Icon name="error" /><span>{scan.error ?? "The scan failed."}</span></div>
       )}
-      {body}
+      {items ? <Results id={scan.id} items={items} /> : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
     </>
   );
 }
 
-function Facts({ scan, items, progress: p }: { scan: ScanRow; items: Item[] | null; progress?: Progress }) {
-  const found = items?.flatMap((i) => (i.found ? [i.found] : [])) ?? [];
-  const count = (s: Severity) => found.reduce((n, f) => n + f.findings.filter((x) => x.severity === s).length, 0);
-  const serious = count("high") + count("medium") > 0;
+function Status({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
+  if (scan.status === "queued") return <span className="chip plain">Queued</span>;
+  if (scan.status === "failed") return <span className="chip bad">Failed</span>;
+  if (scan.status === "done") return <span>Finished {new Date(scan.finished ?? scan.created).toLocaleString()}</span>;
   return (
     <>
-      {scan.status === "failed" && <span className="chip bad">Failed</span>}
-      {scan.status === "queued" && <span className="chip plain">Queued</span>}
-      {scan.status === "running" && <span className="chip plain"><span className="spinner tiny" />Scanning</span>}
-      {scan.status === "done" && items && !serious && <span className="chip ok">Nothing serious</span>}
+      <span className="chip plain"><span className="spinner tiny" />Scanning</span>
       {p?.phase === "endpoints" && p.inspecting && (
         <span>Checking port <b className="mono">{p.inspecting}</b>, {Math.min(p.services_done + 1, p.services_total)} of {p.services_total}</span>
       )}
-      {(["high", "medium", "low"] as const).map((s) => count(s) > 0 && (
-        <span key={s} className={"chip " + SEVERITY[s]}>{count(s)} {s}</span>
-      ))}
     </>
+  );
+}
+
+// Results is the scan's findings: how many of each severity, then every open
+// port, worst first, each opening its own page.
+function Results({ id, items }: { id: string; items: Item[] }) {
+  if (items.length === 0) return <div className="card empty">No open ports found</div>;
+  const findings = items.flatMap((i) => i.found?.findings ?? []);
+  const endpoints = items.reduce((n, i) => n + (i.found?.endpoints.length ?? 0), 0);
+  return (
+    <>
+      <div className="tally">
+        {LEVELS.map((s) => (
+          <div key={s} className={"tally-item " + SEVERITY[s]}>
+            <b>{findings.filter((f) => f.severity === s).length}</b><span>{s}</span>
+          </div>
+        ))}
+        <div className="tally-item"><b>{items.length}</b><span>Open ports</span></div>
+        <div className="tally-item"><b>{endpoints}</b><span>Endpoints</span></div>
+      </div>
+      <ul className="card results">
+        {sorted(items).map((item) => (
+          <li key={item.port}>
+            <a className={"result " + item.state} href={href(id, item.port)}>
+              <span className="port-num">{item.port}<small>/tcp</small></span>
+              <span className="result-service">{item.service}</span>
+              <span className="result-what">
+                {item.state === "waiting" && "Waiting"}
+                {item.state === "checking" && <><span className="spinner small" />Checking endpoints</>}
+                {item.found && <Counts findings={item.found.findings} />}
+              </span>
+              <span className="result-meta">{item.found && plural(item.found.endpoints.length, "endpoint")}</span>
+              <Icon name="chevron_right" className="result-go" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+// Counts is a chip per severity found, worst first, or a quiet all clear.
+function Counts({ findings }: { findings: Finding[] }) {
+  const shown = LEVELS.filter((s) => s !== "info" && findings.some((f) => f.severity === s));
+  if (!shown.length) return <span className="muted">Nothing serious</span>;
+  return (
+    <span className="chips">
+      {shown.map((s) => <span key={s} className={"chip " + SEVERITY[s]}>{findings.filter((f) => f.severity === s).length} {s}</span>)}
+    </span>
+  );
+}
+
+// Detail is one port's page: back to the findings, a step to the ports either
+// side, then the findings on it and the endpoints it serves.
+function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) {
+  const i = items.indexOf(item);
+  const prev = items[i - 1];
+  const next = items[i + 1];
+  const f = item.found;
+  return (
+    <>
+      <div className="page-head">
+        <a className="icon-btn" href={href(id)} aria-label="Back to findings" title="Back to findings"><Icon name="arrow_back" /></a>
+        <div className="page-head-main">
+          <h1 className="port-num">{item.port}<small>/tcp</small></h1>
+          <div className="page-sub">
+            <span>{item.service}</span>
+            {f && <Counts findings={f.findings} />}
+          </div>
+        </div>
+        <div className="pager">
+          <Step id={id} to={prev} label="Previous port" icon="chevron_left" />
+          <span className="pager-pos">{i + 1} of {items.length}</span>
+          <Step id={id} to={next} label="Next port" icon="chevron_right" />
+        </div>
+      </div>
+
+      {!f && (
+        <Card title={item.state === "checking" ? "Checking endpoints" : "Waiting its turn"}>
+          <div className="skeleton" aria-label="Loading">{[0, 1, 2, 3].map((k) => <span key={k} className="bone" />)}</div>
+        </Card>
+      )}
+      {f && (
+        <div className="stack">
+          <Card title="Findings" sub={plural(f.findings.length, "finding")}>
+            {f.findings.length
+              ? <ul className="findings">{[...f.findings].sort((a, b) => LEVELS.indexOf(a.severity) - LEVELS.indexOf(b.severity)).map((x, k) => <FindingRow key={k} finding={x} />)}</ul>
+              : <div className="empty">No findings on this port</div>}
+          </Card>
+          <Card title="Endpoints" sub={plural(f.endpoints.length, "endpoint")} action={f.endpoints.length > 0 && <Legend />}>
+            {f.endpoints.length
+              ? <EndpointsTable endpoints={f.endpoints} />
+              : <div className="empty">No HTTP endpoints on this port</div>}
+          </Card>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Card is a titled section: a heading, a line under it, an action on the
+// right, and what it holds.
+export function Card({ title, sub, action, children }: { title: ReactNode; sub?: ReactNode; action?: ReactNode; children?: ReactNode }) {
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div className="card-titles">
+          <h2>{title}</h2>
+          {sub && <p>{sub}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Step({ id, to, label, icon }: { id: string; to?: Item; label: string; icon: "chevron_left" | "chevron_right" }) {
+  if (!to) return <span className="icon-btn" aria-disabled="true"><Icon name={icon} /></span>;
+  return <a className="icon-btn" href={href(id, to.port)} aria-label={label} title={label}><Icon name={icon} /></a>;
+}
+
+function FindingRow({ finding: f }: { finding: Finding }) {
+  const where = path(f.location);
+  return (
+    <li className="finding">
+      <span className={"chip " + SEVERITY[f.severity]}>{f.severity}</span>
+      <div>
+        <div className="finding-title">{f.title}</div>
+        <div className="fix">{f.detail}</div>
+      </div>
+      {where && <code className="finding-where">{where}</code>}
+    </li>
   );
 }
 
@@ -111,161 +230,16 @@ function Stage({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
   );
 }
 
-// Card is a titled section: a heading, a line under it, an action on the
-// right, and what it holds.
-export function Card({ title, sub, action, children }: { title: ReactNode; sub?: ReactNode; action?: ReactNode; children?: ReactNode }) {
+function Loading() {
   return (
-    <section className="card">
-      <div className="card-head">
-        <div className="card-titles">
-          <h2>{title}</h2>
-          {sub && <p>{sub}</p>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-// Catalog is every open port as a card: what it is, the worst thing on it,
-// and how much it holds. A card opens the port's page.
-function Catalog({ id, items }: { id: string; items: Item[] }) {
-  if (items.length === 0) return <div className="card"><div className="empty">No open ports found</div></div>;
-  return (
-    <div className="cards">
-      {items.map((item) => {
-        const f = item.found;
-        const worst = f?.findings.find((x) => x.severity !== "info");
-        return (
-          <a key={item.port} className={"card tile " + item.state} href={href(id, "ports", item.port)}>
-            <span className="tile-top">
-              <span className="port-num">{item.port}<small>/tcp</small></span>
-              {item.state === "checking" && <span className="spinner small" aria-label="Checking" />}
-              {worst && <span className={"chip " + SEVERITY[worst.severity]}>{worst.severity}</span>}
-            </span>
-            <span className="tile-service">{item.service}</span>
-            <span className="tile-meta">
-              {item.state === "waiting" && "Waiting"}
-              {item.state === "checking" && "Checking endpoints"}
-              {f && <>{plural(f.findings.length, "finding")} · {plural(f.endpoints.length, "endpoint")}</>}
-            </span>
-          </a>
-        );
-      })}
+    <div className="card results" aria-label="Loading">
+      {[0, 1, 2, 3].map((i) => <div key={i} className="result"><span className="bone short" /><span className="bone" /></div>)}
     </div>
-  );
-}
-
-// Endpoints is every endpoint the scan found, a card per port.
-function Endpoints({ id, items, going }: { id: string; items: Item[]; going: boolean }) {
-  const ports = items.filter((i) => i.found?.endpoints.length);
-  if (!ports.length) return <Nothing going={going} what="No HTTP endpoints found" />;
-  return (
-    <div className="stack">
-      <Legend />
-      {ports.map((i) => (
-        <Card key={i.port} title={<span className="port-num">{i.port}<small>/tcp</small></span>}
-          sub={<>{i.service} · {plural(i.found!.endpoints.length, "endpoint")}</>}
-          action={<a className="card-action" href={href(id, "ports", i.port)}>Open port</a>}>
-          <EndpointsTable endpoints={i.found!.endpoints} />
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-// Findings is every finding the scan made, a card per severity, worst first.
-function Findings({ id, items, going }: { id: string; items: Item[]; going: boolean }) {
-  const all = items.flatMap((i) => i.found?.findings ?? []);
-  if (!all.length) return <Nothing going={going} what="No findings" />;
-  return (
-    <div className="stack">
-      {(["high", "medium", "low", "info"] as const).map((s) => {
-        const these = all.filter((f) => f.severity === s);
-        return these.length > 0 && (
-          <Card key={s} title={<span className="severity-title"><span className={"dot " + SEVERITY[s]} />{s}</span>} sub={plural(these.length, "finding")}>
-            <ul className="findings">{these.map((x, k) => <FindingRow key={k} id={id} finding={x} />)}</ul>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-// PortPage is one port: back to the catalog, a step to the ports either
-// side, and what it holds, its findings and its endpoints each on a card.
-function PortPage({ id, item, items }: { id: string; item: Item; items: Item[] }) {
-  const i = items.indexOf(item);
-  const prev = items[i - 1];
-  const next = items[i + 1];
-  const f = item.found;
-  return (
-    <section className="port-page">
-      <div className="port-page-head">
-        <a className="btn back" href={href(id)}>
-          <Icon name="arrow_back" size={18} /><span>All ports</span>
-        </a>
-        <h2 className="port-title">
-          <span className="port-num">{item.port}<small>/tcp</small></span>
-          <span className="muted">{item.service}</span>
-        </h2>
-        <div className="pager">
-          <Step id={id} to={prev} label="Previous port" icon="chevron_left" />
-          <span className="pager-pos">{i + 1} of {items.length}</span>
-          <Step id={id} to={next} label="Next port" icon="chevron_right" />
-        </div>
-      </div>
-
-      {!f && (
-        <Card title={item.state === "checking" ? "Checking endpoints" : "Waiting its turn"}>
-          <SkeletonRows rows={4} />
-        </Card>
-      )}
-      {f && (
-        <div className="stack">
-          <Card title="Findings" sub={plural(f.findings.length, "finding")}>
-            {f.findings.length
-              ? <ul className="findings">{f.findings.map((x, k) => <FindingRow key={k} finding={x} />)}</ul>
-              : <div className="empty">No findings on this port</div>}
-          </Card>
-          <Card title="Endpoints" sub={plural(f.endpoints.length, "endpoint")} action={f.endpoints.length > 0 && <Legend />}>
-            {f.endpoints.length
-              ? <EndpointsTable endpoints={f.endpoints} />
-              : <div className="empty">No HTTP endpoints on this port</div>}
-          </Card>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Step({ id, to, label, icon }: { id: string; to?: Item; label: string; icon: "chevron_left" | "chevron_right" }) {
-  if (!to) return <span className="icon-btn" aria-disabled="true"><Icon name={icon} /></span>;
-  return <a className="icon-btn" href={href(id, "ports", to.port)} aria-label={label} title={label}><Icon name={icon} /></a>;
-}
-
-// FindingRow is one finding. Given the scan's id, it is on a page of every
-// finding and links the port it was found on.
-function FindingRow({ id, finding: f }: { id?: string; finding: Finding }) {
-  const where = path(f.location);
-  const port = portIn(f.location);
-  return (
-    <li className="finding">
-      <span className={"chip " + SEVERITY[f.severity]}>{f.severity}</span>
-      <div>
-        <div className="finding-title">{f.title}</div>
-        <div className="fix">{f.detail}</div>
-      </div>
-      <span className="finding-where">
-        {id && port > 0 && <a className="port-link mono" href={href(id, "ports", port)}>{port}</a>}
-        {where && <code>{where}</code>}
-      </span>
-    </li>
   );
 }
 
 export const SEVERITY: Record<Severity, string> = { high: "bad", medium: "warn", low: "plain", info: "ok" };
+const LEVELS: Severity[] = ["high", "medium", "low", "info"];
 const POSTURE: Record<Posture, string> = {
   configured: "Configured",
   insecure: "Bypassable",
@@ -310,26 +284,11 @@ function EndpointsTable({ endpoints }: { endpoints: Endpoint[] }) {
   );
 }
 
-// Nothing is an empty page: still filling while the scan runs, else empty.
-function Nothing({ going, what }: { going: boolean; what: string }) {
-  if (going) return <Card title="Checking endpoints"><SkeletonRows rows={4} /></Card>;
-  return <div className="card"><div className="empty">{what}</div></div>;
-}
-
-function Loading() {
-  return (
-    <div className="cards" aria-label="Loading">
-      {[0, 1, 2, 3].map((i) => <div key={i} className="card tile"><span className="bone short" /><span className="bone" /></div>)}
-    </div>
-  );
-}
-
-function SkeletonRows({ rows }: { rows: number }) {
-  return (
-    <div className="skeleton" aria-label="Loading">
-      {Array.from({ length: rows }, (_, i) => <span key={i} className="bone" />)}
-    </div>
-  );
+// sorted puts the ports in the order the findings list them: worst finding
+// first, then by number.
+function sorted(items: Item[]) {
+  const rank = (i: Item) => Math.min(LEVELS.length, ...(i.found?.findings ?? []).map((f) => LEVELS.indexOf(f.severity)));
+  return [...items].sort((a, b) => rank(a) - rank(b) || a.port - b.port);
 }
 
 function plural(n: number, word: string) {
@@ -351,7 +310,7 @@ function fromReport(r: Report): Item[] {
     state: "done",
     found: {
       endpoints: r.endpoints.filter((e) => portOf(e.url) === o.port),
-      findings: r.findings.filter((f) => portIn(f.location) === o.port),
+      findings: r.findings.filter((f) => Number(/(?:^|\()port (\d+)/.exec(f.location)?.[1]) === o.port),
     },
   }));
 }
@@ -359,12 +318,6 @@ function fromReport(r: Report): Item[] {
 function portOf(url: string) {
   const u = new URL(url);
   return Number(u.port || (u.protocol === "https:" ? 443 : 80));
-}
-
-// portIn is the port a finding's location names, `port 22` or
-// `<url> (port 8080)`, 0 for none.
-function portIn(location: string) {
-  return Number(/(?:^|\()port (\d+)/.exec(location)?.[1] ?? 0);
 }
 
 // path is the part of a finding's location worth showing inside its port:

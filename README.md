@@ -44,11 +44,12 @@ computer. Focused, the bar lists your recent scans, narrowed to what you type.
 The `?` beside it opens the docs, and the theme button picks light, dark or the
 system's setting.
 
-The sidebar holds the scans and, for the one open, its pages: **Ports**, a catalog
-of tiles, each opening the port's own page with its findings and endpoints on
-tabs; **Endpoints**, every endpoint on any port, with the same verdict blocks as
-the CLI; and **Findings**, everything found, worst first. While the scan runs, a
-pill carries the port being scanned, and each port shows as soon as it is done.
+Your scans are listed as cards. A scan opens on its **Findings**: a count per
+severity, then every open port, worst first. Each port opens its own page with
+the findings on it and its endpoints, with the same verdict blocks as the CLI.
+Inside a scan, the sidebar's back button returns to the scans. While the scan
+runs, a pill carries the port being scanned, and each port shows as soon as it
+is done.
 The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,
 `./portscan/data` next to `compose.yaml` elsewhere.
 
