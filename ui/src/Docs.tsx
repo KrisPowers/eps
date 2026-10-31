@@ -171,6 +171,13 @@ const SECTIONS: Record<string, ReactNode> = {
       <Doc title="DNS">
         <p>The target's records in a table you can filter by type, asked of the resolver the dashboard uses: addresses, aliases, mail and name servers, TXT and CAA, its DMARC policy, and the reverse name of the address scanned. A domain that takes mail gets its SPF and DMARC state on one line above.</p>
       </Doc>
+      <Doc title="Sitemap">
+        <p>Every path on each website the scan finds: from <code>/</code> and the path in your URL, the site's <code>robots.txt</code> (paths it disallows too) and its sitemaps, and its own links, up to 100 pages and three links deep. Each with its status and title.</p>
+      </Doc>
+      <Doc title="Client-side">
+        <p>What the site's pages would do in your browser, checked so you never have to open them. The scanner fetches each page and every script it loads, from the site or anywhere else, and reads them without running anything, for code that asks for your location or looks up your IP address, can reveal your local IP over WebRTC, fingerprints your device or browser, asks for your camera, microphone, sensors or clipboard, watches your keystrokes, mines cryptocurrency or hides itself; and for hidden frames, password forms that post to another site, redirects, trackers and session recorders. Serious ones show on Findings too.</p>
+        <p>Code that only builds these calls as it runs can slip past a reading, so a clean result means nothing was found, not that nothing is there.</p>
+      </Doc>
       <Doc title="History">
         <p>Every kept scan of the same target, newest first, with what it found. Open a scan to see what changed from the one before it: ports that opened or closed, findings that are new or resolved. The scan running counts what it has found so far.</p>
       </Doc>

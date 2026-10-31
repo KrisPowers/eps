@@ -25,6 +25,17 @@ command:
 - **DNS** - the target's records (A, AAAA, CNAME, MX, NS, TXT, CAA, DMARC and
   the reverse name), asked of the system resolver, with SPF and DMARC checked
   for a domain that takes mail.
+- **Sitemap** - every path on each website found: from `/` and a URL's own
+  path, `robots.txt` (disallowed paths included) and its sitemaps, and its own
+  links, up to 100 pages and three links deep.
+- **Client-side** - what those pages would do in a visitor's browser, so a
+  site can be checked before anyone opens it. Each page and every script it
+  loads is fetched and read, never run, for code that asks for location or
+  looks up the visitor's IP, can reveal a local IP over WebRTC, fingerprints
+  the device, reaches for the camera, microphone, sensors or clipboard,
+  watches keystrokes, mines cryptocurrency or hides itself; and for hidden
+  frames, password forms posting elsewhere, redirects, trackers and session
+  recorders. Code that only builds such calls as it runs can slip past it.
 - **Greetings** - what each service says first on connect, such as SSH's or
   MySQL's version line. It only listens; nothing is sent.
 - **Posture** - for each endpoint it checks whether it is reachable **without

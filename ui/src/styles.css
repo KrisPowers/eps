@@ -370,6 +370,11 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 }
 .badge.big { width: 56px; height: 56px; margin: 0; border-radius: 16px; font-size: 24px; }
 .badge.logo { --hue: var(--brand); }
+.badge.sev.bad { --hue: var(--bad); }
+.badge.sev.warn { --hue: light-dark(#b06000, var(--warn)); }
+.badge.sev.plain { --hue: var(--accent); }
+.badge.sev.ok { --hue: var(--ok); }
+.evidence { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 .badge.logo svg { width: 22px; height: 22px; fill: currentColor; }
 .badge.logo.big svg { width: 30px; height: 30px; }
 /* The protocol beside a port number. */

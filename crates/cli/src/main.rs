@@ -149,8 +149,10 @@ pub(crate) async fn scan_target(
         rendered_ip: rendered_ip.clone(),
         http: (!opts.no_discovery).then(|| {
             let mut cfg = build_http_config(opts);
-            // A URL's own path is checked along with the usual ones.
+            // A URL's own path is checked along with the usual ones, and
+            // the site's crawl starts from it as well as from `/`.
             if let Some(path) = &target.path {
+                cfg.start.push(path.clone());
                 if !cfg.paths.iter().any(|p| &p.path == path) {
                     cfg.paths.push(PathSpec {
                         path: path.clone(),
@@ -305,6 +307,7 @@ async fn check(op: scan::OpenPort, ctx: &Checks<'_>) -> Checked {
             "tls": one.open_ports[0].tls,
             "apis": one.apis,
             "technologies": technologies,
+            "site": one.sites.first(),
         }),
     );
     Checked {
