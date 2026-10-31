@@ -146,9 +146,7 @@ export function App() {
                 <NavItem key={key} to={`#/${view}/${key}`} icon={icon} label={label} on={section === key || (!section && i === 0)} quiet />
               ))}
             </>
-          ) : (
-            <NavItem to="#/" icon="history" label="Scans" on={view === "scans"} />
-          )}
+          ) : null}
         </nav>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
