@@ -185,8 +185,24 @@ kbd {
 /* A page within a page, such as one port: back, its name, a step either side. */
 .sub-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 20px; }
 .sub-head h2 { font-size: 22px; font-weight: 400; }
-/* Opened from a scan's page, it sits where the bar was, ruled off the same way. */
-.page-body.deep > .sub-head:first-child { margin: -4px 0 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+/* Opened from a scan's page, it takes the bar's exact place and size: one
+   48px line under the heading's rule, ruled off the same way, still while
+   the page under it rises in. */
+.page-body.deep { animation: none; }
+.page-body.deep > :not(.sub-head:first-child) { animation: rise .25s var(--ease) both; }
+.page-body.deep > .sub-head:first-child {
+  flex-wrap: nowrap; gap: 12px; height: 48px; margin: -16px 0 24px; padding: 0; overflow: hidden;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.page-body.deep > .sub-head:first-child .icon-btn { width: 32px; height: 32px; }
+.page-body.deep > .sub-head:first-child .page-head-main,
+.page-body.deep > .sub-head:first-child .title-row,
+.page-body.deep > .sub-head:first-child .title-row > div { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.page-body.deep > .sub-head:first-child h2 { min-width: 0; font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.page-body.deep > .sub-head:first-child .port-num { font-size: 16px; }
+.page-body.deep > .sub-head:first-child .page-sub { flex-wrap: nowrap; margin: 0; overflow: hidden; }
+.page-body.deep > .sub-head:first-child .badge.big { width: 28px; height: 28px; border-radius: 8px; font-size: 14px; }
+.page-body.deep > .sub-head:first-child .badge.logo svg { width: 16px; height: 16px; }
 .doc-title { margin-bottom: 4px; font-size: 20px; font-weight: 400; }
 .page-head h1 { min-width: 0; font-size: 24px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--text-2); }
