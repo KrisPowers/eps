@@ -416,7 +416,7 @@ export function Dns({ host, live: l }: { host: string; live: Live }) {
             <tbody>
               {shown.map((r, i) => (
                 <tr key={i}>
-                  <td><span className="method">{r.kind}</span></td>
+                  <td className="mono"><b>{r.kind}</b></td>
                   <td className="mono">{r.name}</td>
                   <td className="mono wrap">{r.value}</td>
                   <td className="muted">{ttl(r.ttl)}</td>
