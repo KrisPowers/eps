@@ -51,6 +51,9 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
   const found = live(scan, report, p);
   const host = hostOf(scan.target);
   const more = (report?.addresses?.length ?? 0) - 1;
+  // A port or one item open: its own heading takes the bar's place, so back
+  // goes to the page it came from, and from there to every scan.
+  const deep = !!open || !!item;
   return (
     <>
       <div className="page-head">
@@ -73,12 +76,12 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
           </button>
         </div>
       </div>
-      <ScanNav scan={scan} page={page} />
+      {!deep && <ScanNav scan={scan} page={page} />}
       {scan.status === "failed" && (
         <div className="callout bad"><Icon name="error" /><span>{scan.error ?? "The scan failed."}</span></div>
       )}
       {/* The heading and bar above stay put; only what's under them changes from page to page. */}
-      <div className="page-body" key={page + "/" + (port ?? "") + "/" + (item ?? "")}>
+      <div className={"page-body" + (deep ? " deep" : "")} key={page + "/" + (port ?? "") + "/" + (item ?? "")}>
       {open && items ? <Detail id={scan.id} item={open} items={sorted(items)} />
         : page === "history" ? <History scan={scan} live={found} history={history} previous={previous} />
         : page === "software" ? (item ? <SoftwareDetail id={scan.id} live={found} name={item} /> : <Software id={scan.id} live={found} />)
