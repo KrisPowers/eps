@@ -109,7 +109,6 @@ export function App() {
         <button type="button" className="icon-btn menu-btn" aria-label="Menu" aria-expanded={drawer} onClick={() => setDrawer((d) => !d)}>
           <Icon name="menu" />
         </button>
-        <a className="brand" href="#/"><Icon name="lan" size={24} /><span>portscan</span></a>
         <ScanBar scans={scans} onScan={start} />
         <div className="header-actions">
           <a className={"icon-btn" + (view === "docs" ? " on" : "")} href="#/docs" aria-label="Help" title="Help"><Icon name="help" /></a>
