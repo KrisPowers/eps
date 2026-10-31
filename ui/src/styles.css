@@ -578,16 +578,38 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 .btn.danger:hover { background: var(--bad-bg); }
 .btn.danger.armed { border-color: var(--bad); background: var(--bad); color: var(--on-bad); }
 
-/* ---- settings and docs: sections flow as plain text, no boxes ---- */
-.flow { gap: 36px; }
-.flow .card { background: none; border-radius: 0; overflow: visible; }
-.flow .card-head { padding: 0 0 6px; }
-.flow .card-head h2 { font-size: 16px; font-weight: 500; }
-.flow .setting { border-top: 0; padding: 10px 0; min-height: 0; }
-.flow .doc { padding: 0; gap: 10px; }
-.flow .doc .table-wrap { margin: 0; }
-.flow .preview { padding: 0; }
+/* ---- settings and docs: sections flow as plain text, no boxes ----
+   A readable column; a hairline and room between sections; a clear heading,
+   then text with space to breathe. */
+.flow { max-width: 760px; gap: 0; }
+.flow .doc-title { margin-bottom: 8px; font-size: 24px; font-weight: 400; line-height: 1.3; }
+.flow .card { background: none; border-radius: 0; overflow: visible; padding: 28px 0; }
+.flow .card + .card, .flow .tally + .card { border-top: 1px solid var(--line); }
+.flow .card-head { padding: 0 0 12px; gap: 24px; }
+.flow .card-titles { gap: 4px; }
+.flow .card-head h2 { font-size: 16px; font-weight: 500; line-height: 1.4; }
+.flow .card-head p { font-size: 13px; line-height: 1.5; }
+
+/* A setting: what it is and what it does on the left, its control on the right. */
+.flow .setting { gap: 32px; min-height: 0; padding: 14px 0; border-top: 0; }
+.flow .setting-title { font-size: 14px; line-height: 1.4; }
+.flow .setting-sub { margin-top: 4px; font-size: 13px; line-height: 1.5; max-width: 52ch; }
+.flow .preview { padding: 4px 0 0; }
+.flow .tally { margin: 12px 0 8px; gap: 24px; }
 .flow .tally-item { padding: 0; background: none; }
+
+/* Help: headings, then paragraphs and lists at a reading measure. */
+.flow .doc { padding: 28px 0; gap: 14px; background: none; }
+.flow .doc + .doc { border-top: 1px solid var(--line); }
+.flow .doc h3 { font-size: 16px; font-weight: 500; line-height: 1.4; }
+.flow .doc p { line-height: 1.65; color: var(--text-2); max-width: 68ch; }
+.flow .doc p b { color: var(--text); }
+.flow .doc .table-wrap { margin: 0; }
+.flow .doc .table td.wrap { line-height: 1.55; }
+.flow .examples { gap: 14px; }
+.flow .examples li { grid-template-columns: 220px minmax(0, 1fr); gap: 20px; line-height: 1.55; }
+.flow .bullets { gap: 10px; line-height: 1.6; }
+.flow p code, .flow li code { padding: 2px 6px; font-size: 12.5px; }
 
 /* ---- docs ---- */
 .bullets { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--text-2); }
@@ -629,7 +651,8 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
   .result-what { grid-column: 1 / 3; grid-row: 2; }
   .result-meta { display: none; }
   .result-go { grid-column: 3; grid-row: 1 / 3; }
-  .examples li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .examples li, .flow .examples li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .flow .setting { flex-wrap: wrap; gap: 12px; }
   .moment-when { min-width: 0; }
   .fold-note-inline { display: none; }
   .change-line { grid-template-columns: minmax(0, 1fr); gap: 6px; }
