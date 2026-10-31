@@ -498,6 +498,51 @@ fn dns_section(paint: Paint, report: &Report, out: &mut String) {
     }
 }
 
+/// Each website: how much of it was mapped and read, then what its pages
+/// would do in a visitor's browser, worst first.
+fn site_section(paint: Paint, report: &Report, out: &mut String) {
+    for s in &report.sites {
+        let site = &s.site;
+        heading(paint, "SITE", &site.base, out);
+        let mut row = Row::new(paint);
+        let third = site.scripts.iter().filter(|x| x.third_party).count();
+        row.add(
+            ACCENT,
+            &format!(
+                "{} mapped  ·  {}, {third} from other sites",
+                plural(site.pages.len(), "path", "paths"),
+                plural(site.scripts.len(), "script", "scripts")
+            ),
+        );
+        row.finish(out);
+        if site.signals.is_empty() {
+            notice(paint, "Nothing found that reaches into a visitor's browser.", out);
+            continue;
+        }
+        let rank = |sev: &str| match sev {
+            "high" => 0,
+            "medium" => 1,
+            _ => 2,
+        };
+        let mut signals: Vec<_> = site.signals.iter().collect();
+        signals.sort_by_key(|x| rank(x.severity));
+        for x in signals {
+            let mut row = Row::new(paint);
+            let tint = match x.severity {
+                "high" => "1;31",
+                "medium" => "1;33",
+                _ => "",
+            };
+            row.add(tint, &x.severity.to_uppercase());
+            row.pad_to(9);
+            row.add("", &fit(&x.label, 44));
+            row.pad_to(55);
+            row.add(ACCENT, &fit(&x.page, WIDTH - 55));
+            row.finish(out);
+        }
+    }
+}
+
 /// Each HTTPS service's certificate, and any old TLS versions it accepts.
 fn tls_section(paint: Paint, report: &Report, out: &mut String) {
     for p in &report.open_ports {
@@ -599,6 +644,7 @@ pub fn render_human(report: &Report, services: &[ServiceReport], port: Option<u1
     dns_section(paint, report, &mut out);
     tls_section(paint, report, &mut out);
     api_section(paint, report, &mut out);
+    site_section(paint, report, &mut out);
 
     let served: Vec<&ServiceReport> = services
         .iter()

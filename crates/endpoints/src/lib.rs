@@ -10,7 +10,9 @@
 //!
 //! Every request is a plain `GET`. Nothing is written, submitted, or mutated.
 //! An HTTPS service's certificate and legacy TLS support are read too (see
-//! [`tls`]), and any OpenAPI or Swagger document it serves openly ([`api`]).
+//! [`tls`]), any OpenAPI or Swagger document it serves openly ([`api`]), and
+//! the website on it: its paths, and what its pages would do in a visitor's
+//! browser ([`site`]).
 
 use std::time::Duration;
 
@@ -19,6 +21,7 @@ use reqwest::{redirect::Policy, Client, StatusCode};
 
 pub mod api;
 pub mod paths;
+pub mod site;
 pub mod tls;
 
 /// Response headers that indicate rate limiting is advertised or active.
@@ -57,6 +60,8 @@ pub struct HttpConfig {
     /// services can still be inspected; the scheme is reported either way).
     pub strict_tls: bool,
     pub user_agent: String,
+    /// Paths the site's crawl starts from besides `/`, such as a URL's own.
+    pub start: Vec<String>,
 }
 
 impl Default for HttpConfig {
@@ -69,6 +74,7 @@ impl Default for HttpConfig {
             active_rate_count: 15,
             strict_tls: false,
             user_agent: concat!("portscan/", env!("CARGO_PKG_VERSION"), " (read-only recon)").to_string(),
+            start: Vec::new(),
         }
     }
 }
@@ -232,6 +238,8 @@ pub struct ServiceReport {
     pub tls: Option<tls::TlsReport>,
     /// The API documents it serves without auth.
     pub apis: Vec<api::ApiSpec>,
+    /// The website on it, mapped and read.
+    pub site: Option<site::Site>,
 }
 
 fn build_client(cfg: &HttpConfig) -> anyhow::Result<Client> {
@@ -388,6 +396,7 @@ pub async fn inspect_service(
                 endpoints: Vec::new(),
                 tls: None,
                 apis: Vec::new(),
+                site: None,
             })
         }
     };
@@ -434,6 +443,8 @@ pub async fn inspect_service(
         }
     }
 
+    let site = site::explore(&client, &format!("{scheme}://{}", authority(host, port)), &cfg.start).await;
+
     Ok(ServiceReport {
         port,
         scheme: scheme.to_string(),
@@ -441,6 +452,7 @@ pub async fn inspect_service(
         endpoints,
         tls: tls_report,
         apis,
+        site: Some(site),
     })
 }
 

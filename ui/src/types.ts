@@ -39,6 +39,7 @@ export interface Found {
   tls?: Tls | null;
   apis?: Api[];
   technologies?: Tech[];
+  site?: Site | null;
 }
 
 export interface Progress {
@@ -108,6 +109,46 @@ export interface Report {
   dns?: DnsRecord[];
   // Every address a name resolved to, when there were several.
   addresses?: string[];
+  // Each website found, mapped and read.
+  sites?: Site[];
+}
+
+// A website on one port: its paths, the scripts its pages load, and what
+// those pages would do in a visitor's browser.
+export interface Site {
+  port: number;
+  // `scheme://host:port`.
+  base: string;
+  pages: SitePage[];
+  scripts: Script[];
+  signals: Signal[];
+}
+
+export interface SitePage {
+  path: string;
+  status: number;
+  title?: string;
+  content_type?: string;
+  // How it was found: start, url, link, sitemap or robots.
+  found: string;
+}
+
+export interface Script {
+  url: string;
+  third_party: boolean;
+  // Bytes read; 0 when it couldn't be fetched.
+  bytes: number;
+}
+
+export interface Signal {
+  category: string;
+  label: string;
+  severity: "high" | "medium" | "low";
+  // What it means for someone who opens the page.
+  why: string;
+  evidence: string;
+  page: string;
+  script?: string;
 }
 
 export interface DnsRecord {

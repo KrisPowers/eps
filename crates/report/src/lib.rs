@@ -8,6 +8,7 @@ use std::net::IpAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use endpoints::api::ApiSpec;
+use endpoints::site::Site;
 use scanner::dns::Record;
 use endpoints::tls::{Cert, TlsReport};
 use endpoints::{AuthState, Endpoint, ServiceReport};
@@ -63,6 +64,17 @@ pub struct Report {
     /// went to the first.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<String>,
+    /// Each website found: its paths, scripts, and what its pages would do in
+    /// a visitor's browser.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<SiteView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SiteView {
+    pub port: u16,
+    #[serde(flatten)]
+    pub site: Site,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -312,6 +324,9 @@ pub fn build_findings(open_ports: &[OpenPort], services: &[ServiceReport]) -> Ve
         }
         findings.extend(header_findings(svc));
         findings.extend(svc.apis.iter().filter_map(|a| api_finding(svc.port, a)));
+        if let Some(site) = &svc.site {
+            findings.extend(site_findings(svc.port, site));
+        }
 
         // Cleartext transport note, raised once per plaintext service that has
         // any openly reachable endpoint.
@@ -449,6 +464,29 @@ fn header_findings(svc: &ServiceReport) -> Vec<Finding> {
         });
     }
     out
+}
+
+/// What a site's pages would do in a visitor's browser that's worth flagging:
+/// its high and medium signals, located at the script or page that showed
+/// them. Low ones stay on the site's own page.
+fn site_findings(port: u16, site: &Site) -> Vec<Finding> {
+    site.signals
+        .iter()
+        .filter_map(|s| {
+            let severity = match s.severity {
+                "high" => Severity::High,
+                "medium" => Severity::Medium,
+                _ => return None,
+            };
+            let at = s.script.clone().unwrap_or_else(|| format!("{}{}", site.base, s.page));
+            Some(Finding {
+                severity,
+                title: s.label.clone(),
+                location: format!("{at} (port {port})"),
+                detail: format!("{} Seen on {}.", s.why, s.page),
+            })
+        })
+        .collect()
 }
 
 /// An API document listing operations that change data with no security
@@ -619,6 +657,15 @@ pub fn assemble(
         technologies: Vec::new(),
         dns: Vec::new(),
         addresses: Vec::new(),
+        sites: services
+            .iter()
+            .filter_map(|s| {
+                s.site.as_ref().map(|site| SiteView {
+                    port: s.port,
+                    site: site.clone(),
+                })
+            })
+            .collect(),
         apis: services
             .iter()
             .flat_map(|s| {
@@ -668,6 +715,7 @@ pub fn assemble_range(target: &str, hosts: &[(IpAddr, Vec<OpenPort>)]) -> Report
         apis: Vec::new(),
         dns: Vec::new(),
         addresses: Vec::new(),
+        sites: Vec::new(),
     }
 }
 
@@ -713,6 +761,7 @@ mod tests {
             endpoints: vec![page.clone(), page],
             tls: None,
             apis: Vec::new(),
+            site: None,
         };
         let titles: Vec<String> = header_findings(&svc).into_iter().map(|f| f.title).collect();
         assert_eq!(
@@ -734,6 +783,7 @@ mod tests {
             endpoints: vec![open_ep("/actuator/env", true, 200)],
             tls: None,
             apis: Vec::new(),
+            site: None,
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.iter().any(|x| x.severity == Severity::High));
@@ -763,6 +813,7 @@ mod tests {
             ],
             tls: None,
             apis: Vec::new(),
+            site: None,
         };
         let f = build_findings(&[], &[svc]);
         assert!(f.windows(2).all(|w| w[0].severity >= w[1].severity));

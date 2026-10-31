@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { ApiDetail, Apis, Badge, BoneRows, Dns, FindingFold, History, live, Software, SoftwareDetail, Tabs } from "./Pages";
+import { ApiDetail, Apis, Badge, BoneRows, Client, ClientDetail, Dns, FindingFold, History, live, Sitemap, Software, SoftwareDetail, Tabs } from "./Pages";
 import { Fold, usePaged } from "./paged";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
@@ -84,6 +84,8 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
         : page === "software" ? (item ? <SoftwareDetail id={scan.id} live={found} name={item} /> : <Software id={scan.id} live={found} />)
         : page === "api" ? (item ? <ApiDetail id={scan.id} live={found} index={item} /> : <Apis id={scan.id} live={found} />)
         : page === "dns" ? <Dns host={host} live={found} />
+        : page === "sitemap" ? <Sitemap live={found} />
+        : page === "client" ? (item ? <ClientDetail id={scan.id} live={found} category={item} /> : <Client id={scan.id} live={found} />)
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -199,7 +201,10 @@ function Export({ report, when }: { report?: Report; when: number }) {
 function ScanNav({ scan, page }: { scan: ScanRow; page: Page }) {
   const pages: [Page, string, IconName][] = isRange(scan)
     ? [["findings", "Hosts", "devices"], ["history", "History", "history"]]
-    : [["findings", "Findings", "shield"], ["software", "Software", "dns"], ["api", "API", "lock"], ["dns", "DNS", "language"], ["history", "History", "history"]];
+    : [
+      ["findings", "Findings", "shield"], ["software", "Software", "dns"], ["api", "API", "lock"], ["dns", "DNS", "language"],
+      ["sitemap", "Sitemap", "lan"], ["client", "Client-side", "devices"], ["history", "History", "history"],
+    ];
   return (
     <nav className="scan-nav" aria-label="Scan pages">
       <a className="scan-nav-back" href="#/"><Icon name="arrow_back" size={18} /><span>All scans</span></a>
