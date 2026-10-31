@@ -103,10 +103,19 @@ function Status({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
   );
 }
 
+// quiet is whether a port is open and nothing more: checked, no endpoints to
+// send anything to, and nothing found worse than info.
+function quiet(item: Item) {
+  return item.state === "done" && !item.found?.endpoints.length && !item.found?.findings.some((f) => f.severity !== "info");
+}
+
 // Results is the scan's findings: one line of what it found, then every open
-// port, worst first, a page at a time, each opening its own page.
+// port, worst first, a page at a time, each opening its own page. Ports that
+// are only open are hidden behind a count under the list until it's clicked.
 function Results({ id, items }: { id: string; items: Item[] }) {
-  const { shown, pager } = usePaged(sorted(items), 10);
+  const [reveal, setReveal] = useState(false);
+  const hidden = items.filter(quiet);
+  const { shown, pager } = usePaged(sorted(reveal ? items : items.filter((i) => !quiet(i))), 10);
   if (items.length === 0) return <div className="card empty">No open ports found</div>;
   return (
     <>
@@ -136,6 +145,13 @@ function Results({ id, items }: { id: string; items: Item[] }) {
           })}
         </ul>
         {pager}
+        {hidden.length > 0 && (
+          <button type="button" className="hidden-note" aria-expanded={reveal} onClick={() => setReveal((r) => !r)}>
+            {reveal
+              ? `Hide the ${hidden.length} ${hidden.length === 1 ? "port" : "ports"} that are only open`
+              : `${hidden.length} hidden ${hidden.length === 1 ? "result" : "results"}: open, with no endpoints or findings`}
+          </button>
+        )}
       </div>
     </>
   );
