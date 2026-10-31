@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { ApiDetail, Apis, Changes, Dns, DnsDetail, History, live, TechDetail, Technologies } from "./Pages";
+import { ApiDetail, Apis, BoneRows, Dns, FindingFold, History, live, Software, SoftwareDetail } from "./Pages";
+import { Fold, usePaged } from "./paged";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
 import { Icon } from "./Icon";
@@ -76,11 +77,10 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
       {/* The heading above stays put; only what's under it changes from page to page. */}
       <div className="page-body" key={page + "/" + (port ?? "") + "/" + (item ?? "")}>
       {open && items ? <Detail id={scan.id} item={open} items={sorted(items)} />
-        : page === "changes" ? <Changes scan={scan} live={found} previous={previous} />
-        : page === "history" ? <History scan={scan} live={found} history={history} />
-        : page === "tech" ? (item ? <TechDetail id={scan.id} live={found} name={item} /> : <Technologies id={scan.id} live={found} />)
+        : page === "history" ? <History scan={scan} live={found} history={history} previous={previous} />
+        : page === "software" ? (item ? <SoftwareDetail id={scan.id} live={found} name={item} /> : <Software id={scan.id} live={found} />)
         : page === "api" ? (item ? <ApiDetail id={scan.id} live={found} index={item} /> : <Apis id={scan.id} live={found} />)
-        : page === "dns" ? (item ? <DnsDetail id={scan.id} live={found} kind={item} /> : <Dns id={scan.id} host={host} live={found} />)
+        : page === "dns" ? <Dns host={host} live={found} />
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -103,40 +103,40 @@ function Status({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
   );
 }
 
-// Results is the scan's findings: how many of each severity, then every open
-// port, worst first, each opening its own page.
+// Results is the scan's findings: one line of what it found, then every open
+// port, worst first, a page at a time, each opening its own page.
 function Results({ id, items }: { id: string; items: Item[] }) {
+  const { shown, pager } = usePaged(sorted(items), 10);
   if (items.length === 0) return <div className="card empty">No open ports found</div>;
-  const findings = items.flatMap((i) => i.found?.findings ?? []);
-  const endpoints = items.reduce((n, i) => n + (i.found?.endpoints.length ?? 0), 0);
   return (
     <>
-      <div className="tally">
-        {LEVELS.map((s) => (
-          <div key={s} className={"tally-item " + SEVERITY[s]}>
-            <b>{findings.filter((f) => f.severity === s).length}</b><span>{s}</span>
-          </div>
-        ))}
-        <div className="tally-item"><b>{items.length}</b><span>Open ports</span></div>
-        <div className="tally-item"><b>{endpoints}</b><span>Endpoints</span></div>
+      <p className="summary-line">
+        <span><b>{items.length}</b> open {items.length === 1 ? "port" : "ports"}</span>
+        <Counts findings={items.flatMap((i) => i.found?.findings ?? [])} />
+      </p>
+      <div className="card">
+        <ul className="results">
+          {shown.map((item) => {
+            const serious = item.found?.findings.filter((f) => f.severity !== "info") ?? [];
+            const worst = LEVELS.find((l) => serious.some((f) => f.severity === l));
+            return (
+              <li key={item.port}>
+                <a className={"result port-row " + item.state} href={href(id, item.port)}>
+                  <span className="port-num">{item.port}<small>/tcp</small></span>
+                  <span className="result-service">{item.service}</span>
+                  <span className="result-what">
+                    {item.state !== "done" ? <><span className="spinner small" /><span className="muted">{item.state === "checking" ? "Checking" : "Waiting"}</span></>
+                      : worst ? <span className={"chip " + SEVERITY[worst]}>{plural(serious.length, "finding")}</span>
+                      : <span className="muted">Nothing serious</span>}
+                  </span>
+                  <Icon name="chevron_right" className="result-go" />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+        {pager}
       </div>
-      <ul className="card results">
-        {sorted(items).map((item) => (
-          <li key={item.port}>
-            <a className={"result " + item.state} href={href(id, item.port)}>
-              <span className="port-num">{item.port}<small>/tcp</small></span>
-              <span className="result-service">{item.service}{item.banner && <small className="mono">{item.banner}</small>}</span>
-              <span className="result-what">
-                {item.state === "waiting" && "Waiting"}
-                {item.state === "checking" && <><span className="spinner small" />Checking endpoints</>}
-                {item.found && <Counts findings={item.found.findings} />}
-              </span>
-              <span className="result-meta">{item.found && plural(item.found.endpoints.length, "endpoint")}</span>
-              <Icon name="chevron_right" className="result-go" />
-            </a>
-          </li>
-        ))}
-      </ul>
     </>
   );
 }
@@ -175,35 +175,35 @@ export function isRange(scan: ScanRow) {
   return scan.target.includes("/");
 }
 
-// Hosts is a range scan's result: each host that answered with its open
-// ports, any one of which can be scanned in full, then the risky services
-// found among them.
+// Hosts is a range scan's result: one line of what it found, each host that
+// answered with its open ports, a page at a time, any one of which can be
+// scanned in full, then the risky services among them, folded.
 function Hosts({ report, onScan }: { report: Report; onScan: (command: string) => void }) {
   const hosts = report.hosts ?? [];
-  const count = (s: Severity) => report.findings.filter((f) => f.severity === s).length;
+  const { shown, pager } = usePaged(hosts, 10);
   return (
     <>
-      <div className="tally four">
-        <div className="tally-item"><b>{hosts.length}</b><span>Hosts up</span></div>
-        <div className="tally-item"><b>{hosts.reduce((n, h) => n + h.open_ports.length, 0)}</b><span>Open ports</span></div>
-        <div className="tally-item bad"><b>{count("high")}</b><span>high</span></div>
-        <div className="tally-item warn"><b>{count("medium")}</b><span>medium</span></div>
-      </div>
-      <div className="stack">
-        {hosts.length === 0 ? <div className="card empty">No host in the range answered on a common port</div> : <HostList hosts={hosts} onScan={onScan} />}
-        {report.findings.length > 0 && (
-          <Card title="Findings" sub={plural(report.findings.length, "finding")}>
-            <ul className="findings">{report.findings.map((f, k) => <FindingRow key={k} finding={f} at />)}</ul>
-          </Card>
-        )}
-      </div>
+      <p className="summary-line">
+        <span><b>{hosts.length}</b> {hosts.length === 1 ? "host" : "hosts"} up</span>
+        <span><b>{hosts.reduce((n, h) => n + h.open_ports.length, 0)}</b> open ports</span>
+        <Counts findings={report.findings} />
+      </p>
+      {hosts.length === 0 ? <div className="card empty">No host in the range answered on a common port</div> : (
+        <div className="card">
+          <HostList hosts={shown} onScan={onScan} />
+          {pager}
+        </div>
+      )}
+      {report.findings.length > 0 && (
+        <div className="card folds gap-top">{report.findings.map((f, k) => <FindingFold key={k} finding={f} />)}</div>
+      )}
     </>
   );
 }
 
 export function HostList({ hosts, onScan }: { hosts: Host[]; onScan?: (command: string) => void }) {
   return (
-    <ul className="card results">
+    <ul className="results">
       {hosts.map((h) => (
         <li key={h.ip}>
           <div className="result host">
@@ -229,12 +229,16 @@ function Counts({ findings }: { findings: Finding[] }) {
 }
 
 // Detail is one port's page: back to the findings, a step to the ports either
-// side, then the findings on it and the endpoints it serves.
+// side, then its findings, its certificate and its endpoints, each a line
+// until it's opened, a page at a time.
 function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) {
   const i = items.indexOf(item);
   const prev = items[i - 1];
   const next = items[i + 1];
   const f = item.found;
+  const findings = [...(f?.findings ?? [])].sort((a, b) => LEVELS.indexOf(a.severity) - LEVELS.indexOf(b.severity));
+  const fp = usePaged(findings, 8);
+  const ep = usePaged(f?.endpoints ?? [], 10);
   return (
     <>
       <div className="sub-head">
@@ -244,7 +248,6 @@ function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) 
           <div className="page-sub">
             <span>{item.service}</span>
             {item.banner && <code className="command-line">{item.banner}</code>}
-            {f && <Counts findings={f.findings} />}
           </div>
         </div>
         <div className="pager">
@@ -256,21 +259,19 @@ function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) 
 
       {!f && (
         <Card title={item.state === "checking" ? "Checking endpoints" : "Waiting its turn"}>
-          <div className="skeleton" aria-label="Loading">{[0, 1, 2, 3].map((k) => <span key={k} className="bone" />)}</div>
+          <BoneRows n={4} />
         </Card>
       )}
       {f && (
         <div className="stack">
-          <Card title="Findings" sub={plural(f.findings.length, "finding")}>
-            {f.findings.length
-              ? <ul className="findings">{[...f.findings].sort((a, b) => LEVELS.indexOf(a.severity) - LEVELS.indexOf(b.severity)).map((x, k) => <FindingRow key={k} finding={x} />)}</ul>
-              : <div className="empty">No findings on this port</div>}
+          <Card title="Findings" sub={plural(findings.length, "finding")}>
+            {findings.length ? fp.shown.map((x, k) => <FindingFold key={k} finding={x} />) : <div className="empty">No findings on this port</div>}
+            {fp.pager}
           </Card>
           {item.tls && <TlsCard tls={item.tls} />}
-          <Card title="Endpoints" sub={plural(f.endpoints.length, "endpoint")} action={f.endpoints.length > 0 && <Legend />}>
-            {f.endpoints.length
-              ? <EndpointsTable endpoints={f.endpoints} />
-              : <div className="empty">No HTTP endpoints on this port</div>}
+          <Card title="Endpoints" sub={plural(f.endpoints.length, "endpoint")}>
+            {f.endpoints.length ? ep.shown.map((e) => <EndpointFold key={e.url} endpoint={e} />) : <div className="empty">No HTTP endpoints on this port</div>}
+            {ep.pager}
           </Card>
         </div>
       )}
@@ -278,40 +279,31 @@ function Detail({ id, item, items }: { id: string; item: Item; items: Item[] }) 
   );
 }
 
-// TlsCard is an HTTPS port's certificate: who it names and who issued it,
-// how long it is good for, the names it covers, and any old TLS versions
-// the port still accepts.
+// TlsCard is an HTTPS port's certificate: who it names, how long it has left
+// and whether old TLS versions still work at a glance, the rest folded.
 function TlsCard({ tls }: { tls: Tls }) {
   const c = tls.cert;
   const left = c ? Math.floor((c.not_after * 1000 - Date.now()) / 86_400_000) : 0;
   const day = (s: number) => new Date(s * 1000).toLocaleDateString();
   return (
-    <Card title="TLS" sub={c ? c.subject : "Certificate not readable"}>
-      <dl className="facts-list">
-        {c && (
-          <>
-            <dt>Issued by</dt>
-            <dd>{c.issuer}{c.self_signed && <span className="chip warn">Self-signed</span>}</dd>
-            <dt>Valid</dt>
-            <dd>
-              {day(c.not_before)} to {day(c.not_after)}
-              <span className={"chip " + (left < 0 ? "bad" : left < 30 ? "warn" : "ok")}>{left < 0 ? `Expired ${-left} days ago` : `${left} days left`}</span>
-            </dd>
-            {c.names.length > 0 && (
-              <>
-                <dt>Covers</dt>
-                <dd className="chips">{c.names.map((n) => <code key={n} className="command-line">{n}</code>)}</dd>
-              </>
-            )}
-          </>
-        )}
-        <dt>Protocols</dt>
-        <dd>
-          {tls.legacy.length
-            ? tls.legacy.map((v) => <span key={v} className="chip bad">{v} accepted</span>)
-            : <span className="chip ok">No TLS 1.0 or 1.1</span>}
-        </dd>
-      </dl>
+    <Card title="TLS" sub={c ? c.subject : "Certificate not readable"}
+      action={
+        <span className="chips">
+          {c && <span className={"chip " + (left < 0 ? "bad" : left < 30 ? "warn" : "ok")}>{left < 0 ? `Expired ${-left} days ago` : `${left} days left`}</span>}
+          {c?.self_signed && <span className="chip warn">Self-signed</span>}
+          {tls.legacy.map((v) => <span key={v} className="chip bad">{v}</span>)}
+        </span>
+      }>
+      {c && (
+        <Fold head={<span className="fold-title">Certificate details</span>}>
+          <dl className="facts-list">
+            <dt>Issued by</dt><dd>{c.issuer}</dd>
+            <dt>Valid</dt><dd>{day(c.not_before)} to {day(c.not_after)}</dd>
+            {c.names.length > 0 && <><dt>Covers</dt><dd className="chips">{c.names.map((n) => <code key={n} className="command-line">{n}</code>)}</dd></>}
+            <dt>Old protocols</dt><dd>{tls.legacy.length ? tls.legacy.join(" and ") + " accepted" : "TLS 1.0 and 1.1 refused"}</dd>
+          </dl>
+        </Fold>
+      )}
     </Card>
   );
 }
@@ -336,26 +328,6 @@ export function Card({ title, sub, action, children }: { title: ReactNode; sub?:
 function Step({ id, to, label, icon }: { id: string; to?: Item; label: string; icon: "chevron_left" | "chevron_right" }) {
   if (!to) return <span className="icon-btn" aria-disabled="true"><Icon name={icon} /></span>;
   return <a className="icon-btn" href={href(id, to.port)} aria-label={label} title={label}><Icon name={icon} /></a>;
-}
-
-// FindingRow is one finding; `at` names the port it is on as well as the
-// path, for a list that mixes ports.
-export function FindingRow({ finding: f, at }: { finding: Finding; at?: boolean }) {
-  const port = /(?:^|\()port (\d+)/.exec(f.location)?.[1];
-  // A range's findings name their host before the port.
-  const head = f.location.split(" (port ")[0];
-  const host = at && !head.startsWith("http") && !head.startsWith("port") ? head : "";
-  const where = [host, at && port ? "port " + port : "", path(f.location)].filter(Boolean).join(" ");
-  return (
-    <li className="finding">
-      <span className={"chip " + SEVERITY[f.severity]}>{f.severity}</span>
-      <div>
-        <div className="finding-title">{f.title}</div>
-        <div className="fix">{f.detail}</div>
-      </div>
-      {where && <code className="finding-where">{where}</code>}
-    </li>
-  );
 }
 
 // Stage is the sweep: skeleton rows for the ports to come and, in the middle
@@ -412,38 +384,32 @@ function Legend() {
   );
 }
 
-function EndpointsTable({ endpoints }: { endpoints: Endpoint[] }) {
+// EndpointFold is an endpoint as one line, its status, path, note and how
+// many of its controls and headers fall short; its blocks fold under it.
+function EndpointFold({ endpoint: e }: { endpoint: Endpoint }) {
+  const blocks = (list: readonly (readonly [string, string])[], verdicts: Record<string, Posture> | undefined) =>
+    verdicts && (
+      <span className="controls">
+        {list.map(([key, label]) => <span key={key} className={"control " + verdicts[key]} title={label + ": " + POSTURE[verdicts[key]]}>{label}</span>)}
+      </span>
+    );
+  const verdicts = [...Object.values(e.controls), ...Object.values(e.headers ?? {})];
+  const short = verdicts.filter((v) => v === "missing" || v === "insecure").length;
   return (
-    <div className="table-wrap">
-      <table className="table">
-        <thead><tr><th>Status</th><th>Path</th><th>Controls</th><th>Headers</th><th className="grow">Note</th></tr></thead>
-        <tbody>
-          {endpoints.map((e) => (
-            <tr key={e.url}>
-              <td className={"mono status-" + Math.floor(e.status / 100)}>{e.status}</td>
-              <td className="mono">{new URL(e.url).pathname}</td>
-              <td>
-                <span className="controls">
-                  {CONTROLS.map(([key, label]) => (
-                    <span key={key} className={"control " + e.controls[key]} title={label + ": " + POSTURE[e.controls[key]]}>{label}</span>
-                  ))}
-                </span>
-              </td>
-              <td>
-                {e.headers && (
-                  <span className="controls">
-                    {HEADERS.map(([key, label]) => (
-                      <span key={key} className={"control " + e.headers![key]} title={label + ": " + POSTURE[e.headers![key]]}>{label}</span>
-                    ))}
-                  </span>
-                )}
-              </td>
-              <td className="muted">{e.note}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Fold head={
+      <>
+        <span className={"mono status-" + Math.floor(e.status / 100)}>{e.status}</span>
+        <span className="mono fold-title">{new URL(e.url).pathname}</span>
+        <span className="muted fold-note-inline">{e.note}</span>
+        {short > 0 ? <span className="chip warn">{short} short</span> : <span className="chip ok">All set</span>}
+      </>
+    }>
+      <div className="blocks">
+        <span className="muted">Controls</span>{blocks(CONTROLS, e.controls)}
+        {e.headers && <><span className="muted">Headers</span>{blocks(HEADERS, e.headers)}</>}
+      </div>
+      <Legend />
+    </Fold>
   );
 }
 
@@ -482,13 +448,6 @@ export function fromReport(r: Report): Item[] {
 function portOf(url: string) {
   const u = new URL(url);
   return Number(u.port || (u.protocol === "https:" ? 443 : 80));
-}
-
-// path is the part of a finding's location worth showing inside its port:
-// the path of an endpoint, nothing for the port itself.
-function path(location: string) {
-  const url = location.split(" (port ")[0];
-  return url.startsWith("http") ? new URL(url).pathname : "";
 }
 
 // Ticker shows a value that, when it changes, rises and fades out while the
