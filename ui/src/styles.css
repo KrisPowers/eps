@@ -115,6 +115,18 @@ kbd {
 .nav-item:hover { background: var(--hover); }
 .nav-item.on { background: var(--accent-bg); color: var(--on-accent-bg); }
 .nav-item.on .icon { color: var(--on-accent-bg); }
+/* A docs or settings section: plain text, its colour easing in, a short bar
+   growing beside the one open. */
+.nav-item.quiet { position: relative; height: 36px; border-radius: 0; color: var(--text-2); font-weight: 400; transition: color .2s var(--ease); }
+.nav-item.quiet .icon { color: inherit; transition: color .2s var(--ease); }
+.nav-item.quiet:hover { background: none; color: var(--text); }
+.nav-item.quiet.on { background: none; color: var(--accent); font-weight: 500; }
+.nav-item.quiet.on .icon { color: var(--accent); }
+.nav-item.quiet::before {
+  content: ""; position: absolute; left: 4px; top: 50%; width: 3px; height: 0; border-radius: 3px;
+  background: var(--accent); transform: translateY(-50%); transition: height .25s var(--ease);
+}
+.nav-item.quiet.on::before { height: 18px; }
 .nav-label { flex: 1; min-width: 0; }
 /* Inside a scan, the way back to every scan takes the top of the sidebar. */
 .nav-back {
