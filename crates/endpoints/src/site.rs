@@ -120,7 +120,7 @@ pub async fn explore(client: &Client, base: &str, start: &[String]) -> Site {
                 found,
             });
             if let Some(to) = got.location.as_deref().and_then(|l| got.url.join(l).ok()) {
-                if !same_origin(&root, &to) && (300..400).contains(&got.status) {
+                if !same_site(&root, &to) && (300..400).contains(&got.status) {
                     site.signals.push(Signal {
                         category: "Redirects and frames",
                         label: format!("Redirects to {}", to.host_str().unwrap_or("another site")),
@@ -283,6 +283,14 @@ fn same_origin(a: &Url, b: &Url) -> bool {
         && a.port_or_known_default() == b.port_or_known_default()
 }
 
+/// Whether two URLs are on the same site by name, whatever their scheme or
+/// port, `www.` aside: moving from HTTP to HTTPS, or to `www.`, isn't
+/// leaving the site.
+fn same_site(a: &Url, b: &Url) -> bool {
+    let name = |u: &Url| u.host_str().map(|h| h.trim_start_matches("www.").to_ascii_lowercase());
+    name(a) == name(b)
+}
+
 /// A link's path on this site, or `None` for one elsewhere or not a page.
 fn local_path(root: &Url, page: &Url, link: &str) -> Option<String> {
     let link = link.trim();
@@ -354,7 +362,7 @@ fn read_page(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, scr
     if password {
         for (tag, _) in elements(html, &lower, "form") {
             let Some(to) = value(tag, "action").and_then(|a| url.join(a.trim()).ok()) else { continue };
-            if !same_origin(root, &to) {
+            if !same_site(root, &to) {
                 site.signals.push(Signal {
                     category: "Forms",
                     label: format!("Sends a password to {}", to.host_str().unwrap_or("another site")),
@@ -383,7 +391,7 @@ fn read_page(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, scr
         let Some(content) = value(tag, "content").filter(|_| refresh) else { continue };
         let target = content.to_ascii_lowercase().find("url=").map(|i| content[i + 4..].trim_matches(['\'', '"', ' ']));
         let Some(to) = target.and_then(|t| url.join(t).ok()) else { continue };
-        if !same_origin(root, &to) {
+        if !same_site(root, &to) {
             site.signals.push(Signal {
                 category: "Redirects and frames",
                 label: format!("Redirects to {}", to.host_str().unwrap_or("another site")),
@@ -769,6 +777,14 @@ mod tests {
         assert!(labels.contains(&"Loads a hidden frame"));
         assert!(labels.contains(&"Sends a password to collect.evil"));
         assert!(labels.contains(&"Asks for a password over plain HTTP"));
+    }
+
+    #[test]
+    fn upgrading_to_https_is_not_leaving() {
+        let http = Url::parse("http://shop.example").unwrap();
+        assert!(same_site(&http, &Url::parse("https://shop.example/").unwrap()));
+        assert!(same_site(&http, &Url::parse("https://www.shop.example/").unwrap()));
+        assert!(!same_site(&http, &Url::parse("https://other.example/").unwrap()));
     }
 
     #[test]
