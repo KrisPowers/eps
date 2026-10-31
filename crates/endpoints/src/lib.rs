@@ -14,6 +14,8 @@
 //! the website on it: its paths, and what its pages would do in a visitor's
 //! browser ([`site`]).
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use futures::stream::{self, StreamExt};
@@ -331,6 +333,51 @@ async fn active_rate_probe(client: &Client, url: &str, count: usize) -> (usize, 
     (sent, false)
 }
 
+/// A path no site has, asked for to see how the service answers what isn't
+/// there.
+const NOWHERE: &str = "/portscan-7f3a9c1e-no-such-path";
+
+/// How a service answers a path that can't exist, when it answers with
+/// success: a single-page app or catch-all serves the same page for every
+/// path, so a path answered the same way isn't really there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Baseline {
+    status: u16,
+    len: usize,
+    hash: u64,
+}
+
+impl Baseline {
+    fn of(status: u16, body: &[u8]) -> Self {
+        let mut h = DefaultHasher::new();
+        body.hash(&mut h);
+        Baseline {
+            status,
+            len: body.len(),
+            hash: h.finish(),
+        }
+    }
+
+    /// Whether an answer is the same one, byte for byte or within 2% of its
+    /// size (for pages that carry a token or timestamp).
+    pub fn matches(&self, status: u16, body: &[u8]) -> bool {
+        let other = Baseline::of(status, body);
+        status == self.status && (other.hash == self.hash || self.len.abs_diff(other.len) * 50 <= self.len.max(1))
+    }
+}
+
+/// How the service answers [`NOWHERE`]; `None` when it says it isn't there.
+async fn baseline(client: &Client, base: &str) -> Option<Baseline> {
+    let resp = client.get(format!("{base}{NOWHERE}")).send().await.ok()?;
+    let status = resp.status().as_u16();
+    if !(200..300).contains(&status) {
+        return None;
+    }
+    let body = resp.bytes().await.ok()?;
+    Some(Baseline::of(status, &body))
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn inspect_path(
     client: &Client,
     scheme: &str,
@@ -339,6 +386,7 @@ async fn inspect_path(
     spec: &PathSpec,
     cfg: &HttpConfig,
     tls: bool,
+    soft404: Option<Baseline>,
 ) -> Option<Endpoint> {
     let url = format!("{scheme}://{}{}", authority(host, port), spec.path);
     let resp = client.get(&url).send().await.ok()?;
@@ -352,6 +400,15 @@ async fn inspect_path(
     let www_authenticate = header_str(&resp, "www-authenticate");
     let location = header_str(&resp, "location");
     let headers = security_headers(&resp);
+
+    // On a service that answers every path, a path answered just like one
+    // that can't exist isn't there.
+    if let Some(base) = soft404.filter(|_| status.is_success()) {
+        let body = resp.bytes().await.ok()?;
+        if base.matches(status.as_u16(), &body) {
+            return None;
+        }
+    }
 
     // Optional active throttling probe - only for openly reachable endpoints,
     // and only when the user explicitly opted in.
@@ -401,6 +458,7 @@ pub async fn inspect_service(
         }
     };
     let tls = scheme == "https";
+    let soft404 = baseline(&client, &format!("{scheme}://{}", authority(host, port))).await;
     let tls_report = if tls {
         Some(tls::TlsReport {
             cert: cert.as_deref().and_then(tls::parse),
@@ -413,7 +471,7 @@ pub async fn inspect_service(
     let endpoints: Vec<Endpoint> = stream::iter(cfg.paths.iter())
         .map(|spec| {
             let client = &client;
-            async move { inspect_path(client, scheme, host, port, spec, cfg, tls).await }
+            async move { inspect_path(client, scheme, host, port, spec, cfg, tls, soft404).await }
         })
         .buffer_unordered(cfg.concurrency.max(1))
         .filter_map(|e| async move { e })
@@ -489,6 +547,18 @@ mod tests {
         assert!(!info.any_signal());
         info.headers_seen.push("x-ratelimit-limit".to_string());
         assert!(info.any_signal());
+    }
+
+    #[test]
+    fn baseline_matches_the_same_page() {
+        let page = b"<html><div id=app></div></html>".repeat(40);
+        let base = Baseline::of(200, &page);
+        assert!(base.matches(200, &page));
+        let mut nonce = page.clone();
+        nonce.extend_from_slice(b"<!-- 1a2b -->");
+        assert!(base.matches(200, &nonce));
+        assert!(!base.matches(200, b"DB_PASSWORD=hunter2"));
+        assert!(!base.matches(404, &page));
     }
 
     #[test]
