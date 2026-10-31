@@ -457,7 +457,7 @@ export function Dns({ host, live: l }: { host: string; live: Live }) {
 
 // ---- subdomains ----
 
-const HOW: Record<string, string> = { certificate: "Certificate log", guess: "Common name" };
+const HOW: Record<string, string> = { certificate: "Certificate log", guess: "Common name", link: "Site link" };
 
 // Copy is a value shown as plain text, underlined with dots and followed by
 // a small copy mark, that copies itself to the clipboard when clicked.
@@ -524,15 +524,44 @@ export function Subdomains({ live: l }: { live: Live }) {
 
 // ---- sitemap ----
 
-const FOUND: Record<string, string> = { start: "Start", url: "Your URL", link: "Link", sitemap: "Sitemap", robots: "robots.txt", script: "Script" };
+const FOUND: Record<string, string> = { start: "Start", url: "Your URL", link: "Link", sitemap: "Sitemap", robots: "robots.txt", script: "Script", linked: "Linked from the site" };
+
+// apexOf is the domain a host belongs to: `docs.shop.co.uk` is `shop.co.uk`.
+function apexOf(host: string) {
+  const l = host.toLowerCase().split(".");
+  const three = l.length >= 3 && l[l.length - 1].length === 2 && ["co", "com", "org", "net", "gov", "ac", "edu"].includes(l[l.length - 2]);
+  return l.slice(three ? -3 : -2).join(".");
+}
+
+// linkedSites is the pages the scanned sites link to on other names under
+// `host`'s domain, as sites of their own: listed, not fetched.
+function linkedSites(sites: Site[], host: string): Site[] {
+  const apex = apexOf(host);
+  const by = new Map<string, Site>();
+  for (const url of sites.flatMap((s) => s.links ?? [])) {
+    let u: URL;
+    try {
+      u = new URL(url);
+    } catch {
+      continue;
+    }
+    const name = u.hostname.toLowerCase();
+    if (name !== apex && !name.endsWith("." + apex)) continue;
+    const site = by.get(u.origin) ?? { port: 0, base: u.origin, pages: [], scripts: [], signals: [] };
+    if (!site.pages.some((p) => p.path === u.pathname)) site.pages.push({ path: u.pathname, status: 0, found: "linked" });
+    by.set(u.origin, site);
+  }
+  return [...by.values()];
+}
 
 // Sitemap is every path mapped on the site: from its start and your URL,
 // its robots.txt and sitemaps, and its own links, a page at a time,
 // filtered by how each was found, and by site when there are several.
-export function Sitemap({ live: l }: { live: Live }) {
+export function Sitemap({ live: l, host }: { live: Live; host: string }) {
   const [base, setBase] = useState("");
   const [found, setFound] = useState("");
-  const sites = l.sites.filter((s) => !base || s.base === base);
+  const every = [...l.sites, ...linkedSites(l.sites, host)];
+  const sites = every.filter((s) => !base || s.base === base);
   const all = sites.flatMap((s) => s.pages.map((p) => ({ ...p, base: s.base })));
   const ways = Object.keys(FOUND).filter((k) => all.some((p) => p.found === k));
   const { shown, pager } = usePaged(found ? all.filter((p) => p.found === found) : all, 15);
@@ -542,9 +571,9 @@ export function Sitemap({ live: l }: { live: Live }) {
   }
   return (
     <>
-      {l.sites.length > 1 && (
-        <Tabs all={l.sites.map((s) => s.base)} value={base} onChange={setBase}
-          counts={(b) => (b ? l.sites.find((s) => s.base === b)?.pages.length ?? 0 : l.sites.reduce((n, s) => n + s.pages.length, 0))} />
+      {every.length > 1 && (
+        <Tabs all={every.map((s) => s.base)} value={base} onChange={setBase}
+          counts={(b) => (b ? every.find((s) => s.base === b)?.pages.length ?? 0 : every.reduce((n, s) => n + s.pages.length, 0))} />
       )}
       <Tabs all={ways.map((k) => FOUND[k])} value={found ? FOUND[found] : ""}
         onChange={(v) => setFound(ways.find((k) => FOUND[k] === v) ?? "")}
@@ -557,7 +586,7 @@ export function Sitemap({ live: l }: { live: Live }) {
               {shown.map((p) => (
                 <tr key={p.base + p.path} title={p.base + p.path}>
                   <td className="mono wrap">{p.path}</td>
-                  <td className={"mono status-" + Math.floor(p.status / 100)}>{p.status}</td>
+                  <td className={"mono status-" + Math.floor(p.status / 100)}>{p.status || ""}</td>
                   <td className="muted wrap">{p.title ?? ""}</td>
                   <td className="muted">{FOUND[p.found] ?? p.found}</td>
                 </tr>
