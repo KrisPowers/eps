@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { ApiDetail, Apis, BoneRows, Dns, FindingFold, History, live, Software, SoftwareDetail } from "./Pages";
+import { ApiDetail, Apis, Badge, BoneRows, Dns, FindingFold, History, live, Software, SoftwareDetail, Tabs } from "./Pages";
 import { Fold, usePaged } from "./paged";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
@@ -109,52 +109,60 @@ function quiet(item: Item) {
   return item.state === "done" && !item.found?.endpoints.length && !item.found?.findings.some((f) => f.severity !== "info");
 }
 
-// Results is the scan's findings: one line of what it found, then every open
-// port, worst first, a page at a time, each opening its own page. Ports that
-// are only open are hidden behind a count under the list until it's clicked.
+// Results is the scan's findings, the way Software shows software: a tile
+// per open port, worst first, filtered by its worst severity, a page at a
+// time, each opening its own page. Ports that are only open hide behind a
+// count under the tiles until it's clicked.
 function Results({ id, items }: { id: string; items: Item[] }) {
   const [reveal, setReveal] = useState(false);
+  const [level, setLevel] = useState("");
   const hidden = items.filter(quiet);
-  const { shown, pager } = usePaged(sorted(reveal ? items : items.filter((i) => !quiet(i))), 10);
+  const visible = sorted(reveal ? items : items.filter((i) => !quiet(i)));
+  const levels = ["High", "Medium", "Low"].filter((l) => visible.some((i) => worstOf(i) === l.toLowerCase()));
+  const { shown, pager } = usePaged(level ? visible.filter((i) => worstOf(i) === level.toLowerCase()) : visible, 12);
   if (items.length === 0) return <div className="card empty">No open ports found</div>;
   return (
     <>
-      <p className="summary-line">
-        <span><b>{items.length}</b> open {items.length === 1 ? "port" : "ports"}</span>
-        <Counts findings={items.flatMap((i) => i.found?.findings ?? [])} />
-      </p>
-      <div className="card">
-        <ul className="results">
-          {shown.map((item) => {
-            const serious = item.found?.findings.filter((f) => f.severity !== "info") ?? [];
-            const worst = LEVELS.find((l) => serious.some((f) => f.severity === l));
-            return (
-              <li key={item.port}>
-                <a className={"result port-row " + item.state} href={href(id, item.port)}>
-                  <span className="port-num">{item.port}<small>/tcp</small></span>
-                  <span className="result-service">{item.service}</span>
-                  <span className="result-what">
-                    {item.state !== "done" ? <><span className="spinner small" /><span className="muted">{item.state === "checking" ? "Checking" : "Waiting"}</span></>
-                      : worst ? <span className={"chip " + SEVERITY[worst]}>{plural(serious.length, "finding")}</span>
-                      : <span className="muted">Nothing serious</span>}
-                  </span>
-                  <Icon name="chevron_right" className="result-go" />
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-        {pager}
-        {hidden.length > 0 && (
-          <button type="button" className="hidden-note" aria-expanded={reveal} onClick={() => setReveal((r) => !r)}>
-            {reveal
-              ? `Hide the ${hidden.length} ${hidden.length === 1 ? "port" : "ports"} that are only open`
-              : `${hidden.length} hidden ${hidden.length === 1 ? "result" : "results"}: open, with no endpoints or findings`}
-          </button>
-        )}
+      <Tabs all={levels} value={level} onChange={setLevel}
+        counts={(l) => (l ? visible.filter((i) => worstOf(i) === l.toLowerCase()).length : visible.length)} />
+      <div className="tiles">
+        {shown.map((item) => {
+          const serious = item.found?.findings.filter((f) => f.severity !== "info") ?? [];
+          const worst = worstOf(item);
+          const software = item.found?.technologies?.[0];
+          return (
+            <a key={item.port} className="tile-card" href={href(id, item.port)}>
+              {software
+                ? <Badge name={software.name} kind={software.kind} />
+                : <span className={"badge sev " + (worst ? SEVERITY[worst] : "ok")} aria-hidden="true"><Icon name="shield" /></span>}
+              <span className="tile-title">{item.port}<small>/tcp</small></span>
+              <span className="tile-sub">{software ? software.name : item.service}</span>
+              <span className="tile-foot">
+                {item.state !== "done"
+                  ? <span className="checking"><span className="spinner tiny" />{item.state === "checking" ? "Checking" : "Waiting"}</span>
+                  : worst ? <span className={"chip " + SEVERITY[worst]}>{plural(serious.length, "finding")}</span>
+                  : <span>Nothing serious</span>}
+                {item.found && <span>{plural(item.found.endpoints.length, "endpoint")}</span>}
+              </span>
+            </a>
+          );
+        })}
       </div>
+      {pager}
+      {hidden.length > 0 && (
+        <button type="button" className="hidden-note" aria-expanded={reveal} onClick={() => setReveal((r) => !r)}>
+          {reveal
+            ? `Hide the ${hidden.length} ${hidden.length === 1 ? "port" : "ports"} that are only open`
+            : `${hidden.length} hidden ${hidden.length === 1 ? "result" : "results"}: open, with no endpoints or findings`}
+        </button>
+      )}
     </>
   );
+}
+
+// worstOf is the worst severity found on a port, info aside, or "".
+function worstOf(item: Item): Severity | "" {
+  return LEVELS.find((l) => l !== "info" && item.found?.findings.some((f) => f.severity === l)) ?? "";
 }
 
 // Export downloads the finished report as JSON, Markdown or SARIF.
