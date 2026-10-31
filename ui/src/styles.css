@@ -377,12 +377,12 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 .evidence { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* A value that copies itself when clicked: plain text, underlined with dots. */
 .copy {
-  padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: copy;
-  text-decoration: underline dotted; text-decoration-color: var(--line-strong); text-underline-offset: 3px;
-  transition: color .15s, text-decoration-color .15s;
+  padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+  text-decoration: underline dotted currentColor 1px; text-underline-offset: 3px;
+  transition: color .15s;
 }
-.copy:hover { color: var(--text); text-decoration-color: currentColor; }
-.copy.done { color: var(--ok); text-decoration-color: currentColor; }
+.copy:hover { color: var(--text); font-weight: 600; }
+.copy.done { color: var(--ok); }
 .badge.logo svg { width: 22px; height: 22px; fill: currentColor; }
 .badge.logo.big svg { width: 30px; height: 30px; }
 /* The protocol beside a port number. */
