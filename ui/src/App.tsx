@@ -144,7 +144,7 @@ export function App() {
               <a className="nav-back" href="#/"><Icon name="arrow_back" /><span>All scans</span></a>
               <hr className="nav-rule" />
               {(view === "docs" ? DOCS : SETTINGS).map(([key, label, icon], i) => (
-                <NavItem key={key} to={`#/${view}/${key}`} icon={icon} label={label} on={section === key || (!section && i === 0)} />
+                <NavItem key={key} to={`#/${view}/${key}`} icon={icon} label={label} on={section === key || (!section && i === 0)} quiet />
               ))}
             </>
           ) : (
@@ -173,9 +173,11 @@ export function App() {
   );
 }
 
-function NavItem({ to, icon, label, on }: { to: string; icon: IconName; label: string; on: boolean }) {
+// NavItem is a page in the sidebar. A section of the docs or settings is
+// `quiet`: plain text, marked by colour and a bar beside it, not a pill.
+function NavItem({ to, icon, label, on, quiet }: { to: string; icon: IconName; label: string; on: boolean; quiet?: boolean }) {
   return (
-    <a className={"nav-item" + (on ? " on" : "")} href={to} aria-current={on ? "page" : undefined}>
+    <a className={"nav-item" + (quiet ? " quiet" : "") + (on ? " on" : "")} href={to} aria-current={on ? "page" : undefined}>
       <Icon name={icon} />
       <span className="nav-label">{label}</span>
     </a>
