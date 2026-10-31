@@ -22,6 +22,7 @@ use futures::stream::{self, StreamExt};
 use reqwest::{redirect::Policy, Client, StatusCode};
 
 pub mod api;
+pub mod names;
 pub mod paths;
 pub mod site;
 pub mod tls;

@@ -3,7 +3,7 @@
 // another page of it, `#/<id>/<page>/<item>` one thing on that page, and
 // `#/<id>/<port>` one port of it.
 
-export type Page = "findings" | "software" | "api" | "dns" | "sitemap" | "client" | "history";
+export type Page = "findings" | "software" | "api" | "dns" | "subdomains" | "sitemap" | "client" | "history";
 
 export interface Route {
   id: string;
@@ -17,7 +17,7 @@ export interface Route {
   section: string;
 }
 
-const PAGES: Page[] = ["findings", "software", "api", "dns", "sitemap", "client", "history"];
+const PAGES: Page[] = ["findings", "software", "api", "dns", "subdomains", "sitemap", "client", "history"];
 
 export function readHash(): Route {
   const [first = "", second = "", third = ""] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);

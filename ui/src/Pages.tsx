@@ -5,7 +5,7 @@ import { logo } from "./logos";
 import { Fold, usePaged } from "./paged";
 import { href } from "./route";
 import { Card, fromProgress, fromReport, plural, SEVERITY, type Item, type Previous } from "./ScanView";
-import type { Api, DnsRecord, Finding, Host, Operation, Progress, Report, ScanRow, Severity, Signal, Site, Tech } from "./types";
+import type { Api, DnsRecord, Finding, Host, Operation, Progress, Report, ScanRow, Severity, Signal, Site, Subdomain, Tech } from "./types";
 
 // The pages of a scan beyond Findings: Software and API, each with a page per
 // thing on it, DNS, and History. Each draws what has been found so far while
@@ -29,6 +29,8 @@ export interface Live {
   hosts: Host[];
   // Each website, mapped and read.
   sites: Site[];
+  // Other names under the target's domain; null until they're in.
+  subdomains: Subdomain[] | null;
 }
 
 const ALL_PORTS = 65535;
@@ -45,6 +47,7 @@ export function live(scan: ScanRow, report: Report | undefined, p: Progress | un
       reached: ALL_PORTS,
       hosts: report.hosts ?? [],
       sites: report.sites ?? [],
+      subdomains: report.subdomains ?? [],
     };
   }
   const items = p ? fromProgress(p) : [];
@@ -58,6 +61,7 @@ export function live(scan: ScanRow, report: Report | undefined, p: Progress | un
     reached: !p || p.phase === "queued" || p.phase === "resolving" ? 0 : p.phase === "ports" ? p.port : ALL_PORTS,
     hosts: [],
     sites: items.flatMap((i) => (i.found?.site ? [i.found.site] : [])),
+    subdomains: p?.subdomains ?? null,
   };
 }
 
@@ -451,9 +455,54 @@ export function Dns({ host, live: l }: { host: string; live: Live }) {
   );
 }
 
+// ---- subdomains ----
+
+const HOW: Record<string, string> = { certificate: "Certificate log", guess: "Common name" };
+
+// Subdomains is the other names under the target's domain: from the public
+// certificate logs, where every certificate issued is recorded, and common
+// names that resolve. Live ones first, a page at a time; any can be scanned.
+export function Subdomains({ live: l, onScan }: { live: Live; onScan: (command: string) => void }) {
+  const [show, setShow] = useState("");
+  const all = [...(l.subdomains ?? [])].sort((a, b) => Number(!a.addresses.length) - Number(!b.addresses.length) || a.name.localeCompare(b.name));
+  const LIVE = "Resolving";
+  const GONE = "Not resolving";
+  const list = all.filter((s) => !show || (show === LIVE ? s.addresses.length > 0 : s.addresses.length === 0));
+  const { shown, pager } = usePaged(list, 15);
+  if (l.subdomains === null) return l.going ? <div className="card"><BoneRows n={6} /></div> : <div className="card empty">Only a domain name has subdomains</div>;
+  if (!all.length) {
+    return <Empty icon="language" title="No other names found">Neither the certificate logs nor common names turned up anything under this domain.</Empty>;
+  }
+  const up = all.filter((s) => s.addresses.length).length;
+  return (
+    <>
+      <Tabs all={[LIVE, GONE]} value={show} onChange={setShow}
+        counts={(v) => (!v ? all.length : v === LIVE ? up : all.length - up)} />
+      <div className="card">
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th className="grow">Name</th><th>Addresses</th><th>Found in</th><th /></tr></thead>
+            <tbody>
+              {shown.map((s) => (
+                <tr key={s.name}>
+                  <td className="mono">{s.name}</td>
+                  <td className="mono muted">{s.addresses.length ? s.addresses.join(", ") : "Not resolving"}</td>
+                  <td className="muted">{s.found.map((f) => HOW[f] ?? f).join(", ")}</td>
+                  <td>{s.addresses.length > 0 && <button type="button" className="btn" onClick={() => onScan("@ " + s.name)}>Scan</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {pager}
+      </div>
+    </>
+  );
+}
+
 // ---- sitemap ----
 
-const FOUND: Record<string, string> = { start: "Start", url: "Your URL", link: "Link", sitemap: "Sitemap", robots: "robots.txt" };
+const FOUND: Record<string, string> = { start: "Start", url: "Your URL", link: "Link", sitemap: "Sitemap", robots: "robots.txt", script: "Script" };
 
 // Sitemap is every path mapped on the site: from its start and your URL,
 // its robots.txt and sitemaps, and its own links, a page at a time,

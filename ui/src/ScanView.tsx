@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { ApiDetail, Apis, Badge, BoneRows, Client, ClientDetail, Dns, FindingFold, History, live, Sitemap, Software, SoftwareDetail, Tabs } from "./Pages";
+import { ApiDetail, Apis, Badge, BoneRows, Client, ClientDetail, Dns, FindingFold, History, live, Sitemap, Software, SoftwareDetail, Subdomains, Tabs } from "./Pages";
 import { Fold, usePaged } from "./paged";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
@@ -84,6 +84,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
         : page === "software" ? (item ? <SoftwareDetail id={scan.id} live={found} name={item} /> : <Software id={scan.id} live={found} />)
         : page === "api" ? (item ? <ApiDetail id={scan.id} live={found} index={item} /> : <Apis id={scan.id} live={found} />)
         : page === "dns" ? <Dns host={host} live={found} />
+        : page === "subdomains" ? <Subdomains live={found} onScan={onScan} />
         : page === "sitemap" ? <Sitemap live={found} />
         : page === "client" ? (item ? <ClientDetail id={scan.id} live={found} category={item} /> : <Client id={scan.id} live={found} />)
         : range && report ? <Hosts report={report} onScan={onScan} />
@@ -203,7 +204,7 @@ function ScanNav({ scan, page }: { scan: ScanRow; page: Page }) {
     ? [["findings", "Hosts", "devices"], ["history", "History", "history"]]
     : [
       ["findings", "Findings", "shield"], ["software", "Software", "dns"], ["api", "API", "lock"], ["dns", "DNS", "language"],
-      ["sitemap", "Sitemap", "lan"], ["client", "Client-side", "devices"], ["history", "History", "history"],
+      ["subdomains", "Subdomains", "hub"], ["sitemap", "Sitemap", "lan"], ["client", "Client-side", "devices"], ["history", "History", "history"],
     ];
   return (
     <nav className="scan-nav" aria-label="Scan pages">

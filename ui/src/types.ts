@@ -56,6 +56,8 @@ export interface Progress {
   inspecting: number[];
   // The DNS records and their findings, once the lookup is done.
   dns?: { records: DnsRecord[]; findings: Finding[] } | null;
+  // The subdomains found, once the logs and guesses are in.
+  subdomains?: Subdomain[] | null;
 }
 
 export interface ScanRow {
@@ -111,6 +113,16 @@ export interface Report {
   addresses?: string[];
   // Each website found, mapped and read.
   sites?: Site[];
+  // Other names under the target's domain.
+  subdomains?: Subdomain[];
+}
+
+export interface Subdomain {
+  name: string;
+  // Its IPv4 addresses now; empty when it no longer resolves.
+  addresses: string[];
+  // "certificate", "guess", or both.
+  found: string[];
 }
 
 // A website on one port: its paths, the scripts its pages load, and what

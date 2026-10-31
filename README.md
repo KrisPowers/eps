@@ -25,9 +25,13 @@ command:
 - **DNS** - the target's records (A, AAAA, CNAME, MX, NS, TXT, CAA, DMARC and
   the reverse name), asked of the system resolver, with SPF and DMARC checked
   for a domain that takes mail.
+- **Subdomains** - other names under the target's domain, from the public
+  certificate transparency logs (crt.sh) and about sixty common names that
+  resolve, each with whether it still resolves.
 - **Sitemap** - every path on each website found: from `/` and a URL's own
-  path, `robots.txt` (disallowed paths included) and its sitemaps, and its own
-  links, up to 100 pages and three links deep.
+  path, `robots.txt` (disallowed paths included) and its sitemaps, its own
+  links up to three deep, and the routes its scripts name, which a single-page
+  app never links in its markup.
 - **Client-side** - what those pages would do in a visitor's browser, so a
   site can be checked before anyone opens it. Each page and every script it
   loads is fetched and read, never run, for code that asks for location or

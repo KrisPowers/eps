@@ -218,7 +218,27 @@ pub(crate) async fn scan_target(
         records
     };
 
-    let (open_ports, mut checked, records) = tokio::join!(sweep, checks, dns);
+    // The domain's other names: the certificate logs and common names, the
+    // logged ones checked for whether they still resolve.
+    let names = async {
+        let Some(domain) = scanner::dns::apex(&target.host) else {
+            return Vec::new();
+        };
+        let (logged, guessed) = tokio::join!(
+            endpoints::names::from_certificates(&domain),
+            scanner::dns::guess(&domain),
+        );
+        let certified = scanner::dns::resolving(&logged).await;
+        let unresolved: Vec<String> = logged
+            .into_iter()
+            .filter(|n| !certified.iter().any(|(c, _)| c == n))
+            .collect();
+        let found = report::subdomains(&target.host, &certified, &unresolved, &guessed);
+        progress.subdomains(serde_json::to_value(&found).unwrap_or_default());
+        found
+    };
+
+    let (open_ports, mut checked, records, subdomains) = tokio::join!(sweep, checks, dns, names);
     checked.sort_by_key(|c: &Checked| c.port);
     let banners: HashMap<u16, String> = checked
         .iter()
@@ -235,6 +255,7 @@ pub(crate) async fn scan_target(
     if ips.len() > 1 {
         report.addresses = ips.iter().map(ToString::to_string).collect();
     }
+    report.subdomains = subdomains;
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {
         report,
