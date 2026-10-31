@@ -6,7 +6,7 @@ import { usePaged } from "./paged";
 import { SETTINGS, Settings } from "./Settings";
 import { Icon, type IconName } from "./Icon";
 import { go, href, readHash } from "./route";
-import { isRange, results, ScanView, SEVERITY } from "./ScanView";
+import { results, ScanView, SEVERITY } from "./ScanView";
 import type { Progress, Report, ScanRow, Severity } from "./types";
 
 // App is the frame every page sits in: a header with the search bar, help
@@ -106,9 +106,11 @@ export function App() {
   return (
     <div className="app">
       <header className="header">
-        <button type="button" className="icon-btn menu-btn" aria-label="Menu" aria-expanded={drawer} onClick={() => setDrawer((d) => !d)}>
-          <Icon name="menu" />
-        </button>
+        {(view === "docs" || view === "settings") && (
+          <button type="button" className="icon-btn menu-btn" aria-label="Menu" aria-expanded={drawer} onClick={() => setDrawer((d) => !d)}>
+            <Icon name="menu" />
+          </button>
+        )}
         <ScanBar scans={scans} onScan={start} />
         <div className="header-actions">
           <a className={"icon-btn" + (view === "docs" ? " on" : "")} href="#/docs" aria-label="Help" title="Help"><Icon name="help" /></a>
@@ -118,27 +120,8 @@ export function App() {
 
       <div className="shell">
         <nav className={"sidebar" + (drawer ? " open" : "")} aria-label="Pages">
-          {id ? (
-            <>
-              <a className="nav-back" href="#/"><Icon name="arrow_back" /><span>All scans</span></a>
-              <hr className="nav-rule" />
-              {selected && (
-                <>
-                  {isRange(selected)
-                    ? <NavItem to={href(selected.id)} icon="devices" label="Hosts" on={page === "findings"} />
-                    : <NavItem to={href(selected.id)} icon="shield" label="Findings" on={page === "findings"} />}
-                  {!isRange(selected) && (
-                    <>
-                      <NavItem to={href(selected.id, "software")} icon="dns" label="Software" on={page === "software"} />
-                      <NavItem to={href(selected.id, "api")} icon="lock" label="API" on={page === "api"} />
-                      <NavItem to={href(selected.id, "dns")} icon="language" label="DNS" on={page === "dns"} />
-                    </>
-                  )}
-                  <NavItem to={href(selected.id, "history")} icon="history" label="History" on={page === "history"} />
-                </>
-              )}
-            </>
-          ) : view === "docs" || view === "settings" ? (
+          {/* A scan's pages are a bar across the top of the scan, not here. */}
+          {view === "docs" || view === "settings" ? (
             <>
               <a className="nav-back" href="#/"><Icon name="arrow_back" /><span>All scans</span></a>
               <hr className="nav-rule" />

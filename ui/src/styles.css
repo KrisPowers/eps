@@ -159,6 +159,25 @@ kbd {
   padding-bottom: 16px; margin-bottom: 24px; border-bottom: 1px solid var(--line);
 }
 .page-head-main { flex: 1; min-width: 0; display: grid; gap: 6px; }
+/* A scan's pages, as a bar just under its heading's rule: back, a short rule,
+   then each page, the open one in the accent colour and underlined. */
+.page-head + .scan-nav { margin-top: -16px; }
+.scan-nav {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 24px; overflow-x: auto; scrollbar-width: none;
+}
+.scan-nav-back, .scan-nav-item {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 14px;
+  color: var(--text-2); font-weight: 500; white-space: nowrap; transition: color .15s;
+}
+.scan-nav-back { padding-left: 0; }
+.scan-nav-back:hover, .scan-nav-item:hover { color: var(--text); }
+.scan-nav-rule { width: 1px; height: 20px; margin: 0 8px; background: var(--line-strong); flex-shrink: 0; }
+.scan-nav-item::after {
+  content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0;
+  background: var(--accent); transform: scaleX(0); transition: transform .2s var(--ease);
+}
+.scan-nav-item.on { color: var(--accent); }
+.scan-nav-item.on::after { transform: scaleX(1); }
 /* What changes from page to page, under a heading that stays put. */
 .page-body { animation: rise .25s var(--ease) both; }
 /* A page within a page, such as one port: back, its name, a step either side. */
