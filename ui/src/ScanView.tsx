@@ -73,10 +73,11 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
           </button>
         </div>
       </div>
+      <ScanNav scan={scan} page={page} />
       {scan.status === "failed" && (
         <div className="callout bad"><Icon name="error" /><span>{scan.error ?? "The scan failed."}</span></div>
       )}
-      {/* The heading above stays put; only what's under it changes from page to page. */}
+      {/* The heading and bar above stay put; only what's under them changes from page to page. */}
       <div className="page-body" key={page + "/" + (port ?? "") + "/" + (item ?? "")}>
       {open && items ? <Detail id={scan.id} item={open} items={sorted(items)} />
         : page === "history" ? <History scan={scan} live={found} history={history} previous={previous} />
@@ -190,6 +191,23 @@ function Export({ report, when }: { report?: Report; when: number }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ScanNav is a scan's pages as a bar across the top of it, under its heading:
+// back to every scan, then each page, the open one underlined.
+function ScanNav({ scan, page }: { scan: ScanRow; page: Page }) {
+  const pages: [Page, string][] = isRange(scan)
+    ? [["findings", "Hosts"], ["history", "History"]]
+    : [["findings", "Findings"], ["software", "Software"], ["api", "API"], ["dns", "DNS"], ["history", "History"]];
+  return (
+    <nav className="scan-nav" aria-label="Scan pages">
+      <a className="scan-nav-back" href="#/"><Icon name="arrow_back" size={18} /><span>All scans</span></a>
+      <span className="scan-nav-rule" aria-hidden="true" />
+      {pages.map(([key, label]) => (
+        <a key={key} className={"scan-nav-item" + (page === key ? " on" : "")} href={href(scan.id, key)} aria-current={page === key ? "page" : undefined}>{label}</a>
+      ))}
+    </nav>
   );
 }
 
