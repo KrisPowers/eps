@@ -106,6 +106,8 @@ export interface Report {
   apis?: Api[];
   // The target's DNS records.
   dns?: DnsRecord[];
+  // Every address a name resolved to, when there were several.
+  addresses?: string[];
 }
 
 export interface DnsRecord {

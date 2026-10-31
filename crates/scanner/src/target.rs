@@ -9,6 +9,9 @@
 //! @example.internal      -> hostnames are resolved via the system resolver
 //! @[2001:db8::1]:443      -> bracketed IPv6 with a port
 //! @2001:db8::1           -> bare IPv6 (no port)
+//! @https://shop.example/login     -> a URL: its host, any port it names, and
+//!                                    its path, which the HTTP phase checks too
+//! @shop.example/login    -> a name with a path, the same way
 //! ```
 //!
 //! An IPv4 range, `@192.168.1.0/24`, is read by [`range`] instead.
@@ -25,6 +28,10 @@ pub fn range(raw: &str) -> Option<Result<Vec<IpAddr>, String>> {
     let s = raw.trim();
     let s = s.strip_prefix('@').unwrap_or(s).trim_start();
     let (ip, bits) = s.split_once('/')?;
+    // `host/path` is a URL without its scheme, not a range.
+    if bits.is_empty() || !bits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
     Some(addresses(ip, bits))
 }
 
@@ -62,6 +69,24 @@ pub struct Target {
     pub port: Option<u16>,
     /// Whether `host` is a literal IPv6 address (affects URL formatting).
     pub is_ipv6: bool,
+    /// The path a URL named, `/login`, which the HTTP phase checks as well.
+    pub path: Option<String>,
+}
+
+/// What a URL, or a host with a path, holds: its authority (`host[:port]`,
+/// any `user@` dropped) and its path, without query or fragment. Anything
+/// else comes back whole, with no path.
+fn url_parts(s: &str) -> (&str, Option<String>) {
+    let rest = s.split_once("://").map_or(s, |(_, r)| r);
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(end);
+    let authority = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let path = tail
+        .split(['?', '#'])
+        .next()
+        .filter(|p| p.len() > 1)
+        .map(str::to_string);
+    (authority, path)
 }
 
 impl Target {
@@ -69,6 +94,7 @@ impl Target {
     pub fn parse(raw: &str) -> Result<Target, String> {
         let s = raw.trim();
         let s = s.strip_prefix('@').unwrap_or(s).trim_start();
+        let (s, path) = url_parts(s);
         if s.is_empty() {
             return Err("empty target".to_string());
         }
@@ -89,6 +115,7 @@ impl Target {
                 host: addr.to_string(),
                 port,
                 is_ipv6: true,
+                path: path.clone(),
             });
         }
 
@@ -103,6 +130,7 @@ impl Target {
                 host: addr.to_string(),
                 port: None,
                 is_ipv6: true,
+                path: path.clone(),
             });
         }
 
@@ -120,6 +148,7 @@ impl Target {
             host: host.to_string(),
             port,
             is_ipv6,
+            path,
         })
     }
 
@@ -219,6 +248,29 @@ mod tests {
         assert!(range("10.0.0.0/33").unwrap().is_err());
         assert!(range("host/24").unwrap().is_err());
         assert!(range("10.0.0.1:80").is_none());
+    }
+
+    #[test]
+    fn urls() {
+        let t = Target::parse("@https://shop.example/login?next=/#top").unwrap();
+        assert_eq!(t.host, "shop.example");
+        assert_eq!(t.port, None);
+        assert_eq!(t.path.as_deref(), Some("/login"));
+
+        let t = Target::parse("http://admin:pw@10.0.0.5:8080/").unwrap();
+        assert_eq!(t.host, "10.0.0.5");
+        assert_eq!(t.port, Some(8080));
+        assert_eq!(t.path, None);
+
+        let t = Target::parse("https://[2001:db8::1]:8443/api").unwrap();
+        assert_eq!(t.host, "2001:db8::1");
+        assert_eq!(t.port, Some(8443));
+        assert_eq!(t.path.as_deref(), Some("/api"));
+
+        let t = Target::parse("shop.example/admin").unwrap();
+        assert_eq!(t.host, "shop.example");
+        assert_eq!(t.path.as_deref(), Some("/admin"));
+        assert!(range("shop.example/admin").is_none());
     }
 
     #[test]

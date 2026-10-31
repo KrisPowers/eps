@@ -103,6 +103,7 @@ const SECTIONS: Record<string, ReactNode> = {
           <li><code>192.168.1.10</code><span>every TCP port, then the HTTP services on them</span></li>
           <li><code>192.168.1.10:8080</code><span>one port only</span></li>
           <li><code>api.internal</code><span>a name, resolved by the system resolver</span></li>
+          <li><code>https://shop.example/login</code><span>a URL: its host is scanned in full, and its path checked with the usual endpoints</span></li>
           <li><code>[2001:db8::1]:443</code><span>IPv6, bracketed when a port is attached</span></li>
           <li><code>api.internal --no-discovery</code><span>with any of the options</span></li>
           <li><code>192.168.1.0/24</code><span>a range: which hosts are up</span></li>

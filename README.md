@@ -130,6 +130,7 @@ cp target/release/portscan ~/.local/bin/@   # or anywhere on your PATH
 @                         # scan this machine (localhost)
 @ 192.168.1.10            # scan all 65535 ports, then inspect any HTTP services
 @ 192.168.1.10:8080       # inspect a single pinned port
+@ https://shop.example/login  # a URL: scan its host, and check its path too
 @ api.internal --json     # machine-readable output for pipelines/CI
 @ 10.0.0.5 --no-discovery # port scan only, skip the HTTP phase
 @ 192.168.1.0/24          # a range: which hosts are up, on the common ports
@@ -141,7 +142,10 @@ services among them. It skips the HTTP phase; scan a host it finds on its own
 for that.
 
 IPv6 is supported as `[2001:db8::1]:443` (bracketed when a port is attached) or
-`2001:db8::1` on its own. Hostnames are resolved via the system resolver.
+`2001:db8::1` on its own. Hostnames are resolved via the system resolver; when
+a name has several addresses, the first is scanned and the report lists them
+all. A URL, or a name with a path, is scanned as its host (and any port it
+names), with its path added to the endpoints checked.
 
 ### Options
 

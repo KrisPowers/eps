@@ -49,14 +49,16 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
   const going = scan.status === "queued" || scan.status === "running";
   const ip = scan.resolved_ip ?? p?.ip;
   const found = live(scan, report, p);
-  const host = scan.target.split(":")[0];
+  const host = hostOf(scan.target);
+  const more = (report?.addresses?.length ?? 0) - 1;
   return (
     <>
       <div className="page-head">
         <div className="page-head-main">
           <h1>{scan.target}</h1>
           <div className="page-sub">
-            {ip && ip !== scan.target && <span className="mono">{ip}</span>}
+            {ip && ip !== host && <span className="mono">{ip}</span>}
+            {more > 0 && <span className="muted" title={report!.addresses!.join(", ")}>and {more} more {more === 1 ? "address" : "addresses"}</span>}
             {/ --?[a-z]/.test(scan.command) && <code className="command-line">{scan.command}</code>}
             <Status scan={scan} progress={going ? p : undefined} />
           </div>
@@ -189,6 +191,15 @@ function Export({ report, when }: { report?: Report; when: number }) {
       )}
     </div>
   );
+}
+
+// hostOf is the host a target names, whether typed as `host:port`, a URL or
+// a host with a path.
+export function hostOf(target: string) {
+  const rest = target.replace(/^@\s*/, "").replace(/^[a-z][\w+.-]*:\/\//i, "");
+  const authority = rest.split(/[/?#]/)[0].split("@").pop() ?? "";
+  if (authority.startsWith("[")) return authority.slice(1, authority.indexOf("]"));
+  return authority.split(":").length === 2 ? authority.split(":")[0] : authority;
 }
 
 // isRange is whether a scan covers a range of addresses, `10.0.0.0/24`,
