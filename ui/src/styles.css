@@ -98,8 +98,8 @@ kbd {
 .header-actions .icon-btn { width: 40px; height: 40px; }
 .header-actions .icon-btn.on { color: var(--on-accent-bg); background: var(--accent-bg); }
 
-/* The sidebar and the page sit together in the middle of the window. */
-.shell { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); gap: 40px; max-width: 1480px; margin: 0 auto; padding: 0 24px; }
+/* The sidebar at the left, a little in from the edge, the page beside it. */
+.shell { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); gap: 40px; padding: 0 32px 0 40px; }
 
 /* The sidebar: the scans, then the open scan's pages, each a pill. It starts
    level with the page's heading. */
@@ -602,7 +602,7 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 .flow .doc { padding: 28px 0; gap: 14px; background: none; }
 .flow .doc + .doc { border-top: 1px solid var(--line); }
 .flow .doc h3 { font-size: 16px; font-weight: 500; line-height: 1.4; }
-.flow .doc p { line-height: 1.65; color: var(--text-2); max-width: 68ch; }
+.flow .doc p { line-height: 1.65; color: var(--text-2); }
 .flow .doc p b { color: var(--text); }
 .flow .doc .table-wrap { margin: 0; }
 .flow .doc .table td.wrap { line-height: 1.55; }
@@ -614,7 +614,7 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 /* ---- docs ---- */
 .bullets { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--text-2); }
 .doc h3 { font-size: 16px; font-weight: 500; }
-.docs { max-width: 860px; display: grid; gap: 16px; }
+.docs.flow { max-width: none; }
 .doc { display: grid; gap: 12px; padding: 20px 24px; }
 .doc h2 { font-size: 20px; font-weight: 400; }
 .doc .table-wrap { margin: 0 -24px; }
