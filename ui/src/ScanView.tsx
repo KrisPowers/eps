@@ -3,7 +3,7 @@ import { ApiDetail, Apis, Badge, BoneRows, Dns, FindingFold, History, live, Soft
 import { Fold, usePaged } from "./paged";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { href, type Page } from "./route";
 import type { Endpoint, Finding, Host, Port, Posture, Progress, Report, ScanRow, Severity, Tls } from "./types";
 
@@ -197,15 +197,17 @@ function Export({ report, when }: { report?: Report; when: number }) {
 // ScanNav is a scan's pages as a bar across the top of it, under its heading:
 // back to every scan, then each page, the open one underlined.
 function ScanNav({ scan, page }: { scan: ScanRow; page: Page }) {
-  const pages: [Page, string][] = isRange(scan)
-    ? [["findings", "Hosts"], ["history", "History"]]
-    : [["findings", "Findings"], ["software", "Software"], ["api", "API"], ["dns", "DNS"], ["history", "History"]];
+  const pages: [Page, string, IconName][] = isRange(scan)
+    ? [["findings", "Hosts", "devices"], ["history", "History", "history"]]
+    : [["findings", "Findings", "shield"], ["software", "Software", "dns"], ["api", "API", "lock"], ["dns", "DNS", "language"], ["history", "History", "history"]];
   return (
     <nav className="scan-nav" aria-label="Scan pages">
       <a className="scan-nav-back" href="#/"><Icon name="arrow_back" size={18} /><span>All scans</span></a>
       <span className="scan-nav-rule" aria-hidden="true" />
-      {pages.map(([key, label]) => (
-        <a key={key} className={"scan-nav-item" + (page === key ? " on" : "")} href={href(scan.id, key)} aria-current={page === key ? "page" : undefined}>{label}</a>
+      {pages.map(([key, label, icon]) => (
+        <a key={key} className={"scan-nav-item" + (page === key ? " on" : "")} href={href(scan.id, key)} aria-current={page === key ? "page" : undefined}>
+          <Icon name={icon} size={18} />{label}
+        </a>
       ))}
     </nav>
   );
