@@ -139,7 +139,9 @@ kbd {
 .nav-rule { height: 1px; margin: 8px 16px; border: 0; background: var(--line); }
 .scrim { display: none; }
 
-.page { min-width: 0; width: 100%; padding: 24px 8px 56px; }
+.page { min-width: 0; width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 8px 56px; }
+/* Help's text runs the width of the window; every other page keeps its column. */
+.page.wide { max-width: none; }
 
 /* The page's heading: its title, a line of facts under it, its actions on
    the right, and a rule below. */
