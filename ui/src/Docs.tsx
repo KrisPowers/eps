@@ -145,7 +145,7 @@ const SECTIONS: Record<string, ReactNode> = {
   findings: (
     <>
       <Doc title="Findings">
-        <p>A scan opens on its <b>Findings</b>: how many of each severity it found, then every open port, worst first, each with the severities found on it and how many endpoints it serves.</p>
+        <p>A scan opens on its <b>Findings</b>: a tile per open port, worst first, with the software on it, its worst severity and how many endpoints it serves, filtered by severity. Ports that are only open, with no endpoints or findings, hide behind a count under the tiles; click it to show them.</p>
       </Doc>
       <Doc title="A port's page">
         <p>Open a port for its own page: its findings, worst first; its TLS certificate when it serves HTTPS; and every endpoint found on it, with a block per security control and header.</p>

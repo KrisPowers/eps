@@ -1,6 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { api } from "./api";
 import { Icon } from "./Icon";
+import { logo } from "./logos";
 import { Fold, usePaged } from "./paged";
 import { href } from "./route";
 import { Card, fromProgress, fromReport, plural, SEVERITY, type Item, type Previous } from "./ScanView";
@@ -179,7 +180,17 @@ function gather(all: Tech[]): Seen[] {
   return [...by.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
 }
 
-function Badge({ name, kind, big }: { name: string; kind: string; big?: boolean }) {
+// Badge is a piece of software's mark: its logo in its brand's colour when
+// it has a well-known one, else its initial in its kind's colour.
+export function Badge({ name, kind, big }: { name: string; kind: string; big?: boolean }) {
+  const mark = logo(name);
+  if (mark) {
+    return (
+      <span className={"badge logo" + (big ? " big" : "")} style={{ "--brand": mark.color } as CSSProperties} aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d={mark.path} /></svg>
+      </span>
+    );
+  }
   return <span className={"badge k-" + (KINDS[kind] ?? "other") + (big ? " big" : "")} aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>;
 }
 
