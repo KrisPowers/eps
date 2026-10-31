@@ -85,7 +85,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
         : page === "api" ? (item ? <ApiDetail id={scan.id} live={found} index={item} /> : <Apis id={scan.id} live={found} />)
         : page === "dns" ? <Dns host={host} live={found} />
         : page === "subdomains" ? <Subdomains live={found} />
-        : page === "sitemap" ? <Sitemap live={found} />
+        : page === "sitemap" ? <Sitemap live={found} host={host} />
         : page === "client" ? (item ? <ClientDetail id={scan.id} live={found} category={item} /> : <Client id={scan.id} live={found} />)
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
@@ -110,9 +110,12 @@ function Status({ scan, progress: p }: { scan: ScanRow; progress?: Progress }) {
 }
 
 // quiet is whether a port is open and nothing more: checked, no endpoints to
-// send anything to, and nothing found worse than info.
+// send anything to, no website or certificate, and nothing found worse than
+// info.
 function quiet(item: Item) {
-  return item.state === "done" && !item.found?.endpoints.length && !item.found?.findings.some((f) => f.severity !== "info");
+  const f = item.found;
+  return item.state === "done" && !f?.endpoints.length && !f?.findings.some((x) => x.severity !== "info")
+    && !item.tls && !f?.site?.pages.length;
 }
 
 // Results is the scan's findings, the way Software shows software: a tile

@@ -134,6 +134,8 @@ export interface Site {
   pages: SitePage[];
   scripts: Script[];
   signals: Signal[];
+  // Pages on other hosts the site links to, often its own subdomains.
+  links?: string[];
 }
 
 export interface SitePage {

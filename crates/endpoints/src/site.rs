@@ -85,6 +85,43 @@ pub struct Site {
     pub pages: Vec<Page>,
     pub scripts: Vec<Script>,
     pub signals: Vec<Signal>,
+    /// Pages on other hosts the site links to, in its markup or its scripts:
+    /// often its own subdomains.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<String>,
+}
+
+/// Links kept per site, at most.
+const MOST_LINKS: usize = 300;
+
+/// Keeps `url` among the site's links when it's on another host.
+fn link_out(site: &mut Site, root: &Url, url: Url) {
+    let web = matches!(url.scheme(), "http" | "https");
+    if web && url.host_str() != root.host_str() && site.links.len() < MOST_LINKS {
+        let mut url = url;
+        url.set_fragment(None);
+        let url = url.to_string();
+        if !site.links.contains(&url) {
+            site.links.push(url);
+        }
+    }
+}
+
+/// Absolute web addresses a script names as string literals.
+fn addresses(code: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    for scheme in ["\"https://", "'https://", "`https://", "\"http://", "'http://", "`http://"] {
+        let quote = &scheme[..1];
+        let mut from = 0;
+        while let Some(i) = code[from..].find(scheme).map(|i| i + from + 1) {
+            let Some(end) = code[i..].find(quote).map(|e| e + i) else { break };
+            if end - i < 300 {
+                out.push(&code[i..end]);
+            }
+            from = end + 1;
+        }
+    }
+    out
 }
 
 /// Maps and reads the site at `base`, starting from `/` and `start` (such
@@ -128,6 +165,11 @@ pub async fn explore(client: &Client, base: &str, start: &[String]) -> Site {
                 if !third_party {
                     for route in routes(&code) {
                         enqueue(&mut seen, &mut queue, route, DEEPEST, "script");
+                    }
+                    for address in addresses(&code) {
+                        if let Ok(u) = Url::parse(address) {
+                            link_out(&mut site, &root, u);
+                        }
                     }
                 }
             }
@@ -179,10 +221,14 @@ async fn crawl(
             }
             let Some(html) = got.html.filter(|_| read) else { continue };
             read_page(site, root, &got.url, &path, &html, scripts);
-            if depth < DEEPEST {
-                for link in values(&html, "a", "href") {
-                    if let Some(next) = local_path(root, &got.url, link) {
-                        enqueue(seen, queue, next, depth + 1, "link");
+            for link in values(&html, "a", "href") {
+                match local_path(root, &got.url, link) {
+                    Some(next) if depth < DEEPEST => enqueue(seen, queue, next, depth + 1, "link"),
+                    Some(_) => {}
+                    None => {
+                        if let Ok(u) = got.url.join(link.trim()) {
+                            link_out(site, root, u);
+                        }
                     }
                 }
             }
@@ -847,6 +893,17 @@ mod tests {
     fn reads_routes_from_scripts() {
         let code = r#"const r=[{path:"/docs"},{path:'/docs/install'}];go(`/blog/`);x="/assets/a.png";y="//cdn";z="/2";w="a/b""#;
         assert_eq!(routes(code), ["/docs", "/docs/install", "/blog/"]);
+    }
+
+    #[test]
+    fn keeps_links_to_other_hosts() {
+        let root = Url::parse("https://shop.example").unwrap();
+        let mut site = Site::default();
+        let code = r#"a="https://docs.shop.example/start";b='https://shop.example/x';c=`https://cdn.example/a.js`"#;
+        for address in addresses(code) {
+            link_out(&mut site, &root, Url::parse(address).unwrap());
+        }
+        assert_eq!(site.links, ["https://docs.shop.example/start", "https://cdn.example/a.js"]);
     }
 
     #[test]

@@ -84,13 +84,14 @@ pub struct Subdomain {
     pub found: Vec<&'static str>,
 }
 
-/// The subdomains of `host`'s domain from certificate names and resolving
-/// guesses, merged by name, the host itself left out.
+/// The subdomains of `host`'s domain from certificate names, resolving
+/// guesses and the site's links, merged by name, the host itself left out.
 pub fn subdomains(
     host: &str,
     certified: &[(String, Vec<String>)],
     unresolved: &[String],
     guessed: &[(String, Vec<String>)],
+    linked: &[(String, Vec<String>)],
 ) -> Vec<Subdomain> {
     let mut by: std::collections::BTreeMap<String, Subdomain> = std::collections::BTreeMap::new();
     let mut add = |name: &str, addresses: &[String], found: &'static str| {
@@ -117,6 +118,9 @@ pub fn subdomains(
     }
     for (name, addresses) in guessed {
         add(name, addresses, "guess");
+    }
+    for (name, addresses) in linked {
+        add(name, addresses, "link");
     }
     by.into_values().collect()
 }
@@ -911,11 +915,13 @@ mod tests {
             &[("api.shop.example".to_string(), ip.clone())],
             &["old.shop.example".to_string(), "shop.example".to_string()],
             &[("api.shop.example".to_string(), ip.clone()), ("www.shop.example".to_string(), ip)],
+            &[("docs.shop.example".to_string(), Vec::new())],
         );
         let names: Vec<&str> = subs.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, ["api.shop.example", "old.shop.example", "www.shop.example"]);
+        assert_eq!(names, ["api.shop.example", "docs.shop.example", "old.shop.example", "www.shop.example"]);
         assert_eq!(subs[0].found, ["certificate", "guess"]);
-        assert!(subs[1].addresses.is_empty());
+        assert_eq!(subs[1].found, ["link"]);
+        assert!(subs[2].addresses.is_empty());
     }
 
     #[test]

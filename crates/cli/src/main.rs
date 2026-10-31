@@ -220,25 +220,27 @@ pub(crate) async fn scan_target(
 
     // The domain's other names: the certificate logs and common names, the
     // logged ones checked for whether they still resolve.
+    let domain = scanner::dns::apex(&target.host);
     let names = async {
-        let Some(domain) = scanner::dns::apex(&target.host) else {
-            return Vec::new();
+        let Some(domain) = &domain else {
+            return Default::default();
         };
         let (logged, guessed) = tokio::join!(
-            endpoints::names::from_certificates(&domain),
-            scanner::dns::guess(&domain),
+            endpoints::names::from_certificates(domain),
+            scanner::dns::guess(domain),
         );
         let certified = scanner::dns::resolving(&logged).await;
         let unresolved: Vec<String> = logged
             .into_iter()
             .filter(|n| !certified.iter().any(|(c, _)| c == n))
             .collect();
-        let found = report::subdomains(&target.host, &certified, &unresolved, &guessed);
+        let found = report::subdomains(&target.host, &certified, &unresolved, &guessed, &[]);
         progress.subdomains(serde_json::to_value(&found).unwrap_or_default());
-        found
+        (certified, unresolved, guessed)
     };
 
-    let (open_ports, mut checked, records, subdomains) = tokio::join!(sweep, checks, dns, names);
+    let (open_ports, mut checked, records, (certified, unresolved, guessed)) =
+        tokio::join!(sweep, checks, dns, names);
     checked.sort_by_key(|c: &Checked| c.port);
     let banners: HashMap<u16, String> = checked
         .iter()
@@ -255,13 +257,42 @@ pub(crate) async fn scan_target(
     if ips.len() > 1 {
         report.addresses = ips.iter().map(ToString::to_string).collect();
     }
-    report.subdomains = subdomains;
+    // The site's links to other names under the domain are subdomains too.
+    if let Some(domain) = &domain {
+        let under = format!(".{domain}");
+        let mut linked: Vec<String> = services
+            .iter()
+            .filter_map(|s| s.site.as_ref())
+            .flat_map(|s| s.links.iter())
+            .filter_map(|u| link_host(u))
+            .filter(|h| (h.ends_with(&under) || h == domain) && !h.eq_ignore_ascii_case(&target.host))
+            .collect();
+        linked.sort();
+        linked.dedup();
+        let resolved = scanner::dns::resolving(&linked).await;
+        let linked: Vec<(String, Vec<String>)> = linked
+            .into_iter()
+            .map(|h| {
+                let found = resolved.iter().find(|(n, _)| *n == h).map(|(_, a)| a.clone());
+                (h, found.unwrap_or_default())
+            })
+            .collect();
+        report.subdomains = report::subdomains(&target.host, &certified, &unresolved, &guessed, &linked);
+    }
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {
         report,
         services,
         pinned: target.port,
     })
+}
+
+/// The host in a web address, lowercased: `https://docs.shop.example/a`
+/// is `docs.shop.example`.
+fn link_host(url: &str) -> Option<String> {
+    let rest = url.split_once("://")?.1;
+    let host = rest.split(['/', '?', '#', ':']).next()?;
+    (!host.is_empty()).then(|| host.to_ascii_lowercase())
 }
 
 /// HTTP services inspected at once, each with its own requests in flight.

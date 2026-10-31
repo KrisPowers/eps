@@ -338,32 +338,53 @@ async fn active_rate_probe(client: &Client, url: &str, count: usize) -> (usize, 
 /// there.
 const NOWHERE: &str = "/portscan-7f3a9c1e-no-such-path";
 
-/// How a service answers a path that can't exist, when it answers with
-/// success: a single-page app or catch-all serves the same page for every
-/// path, so a path answered the same way isn't really there.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Baseline {
-    status: u16,
-    len: usize,
-    hash: u64,
+/// How a service answers a path that can't exist. A single-page app or
+/// catch-all serves the same page for every path, and an HTTP service that
+/// upgrades to HTTPS redirects every path the same way, so a path answered
+/// like one that can't exist isn't really there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Baseline {
+    /// The same page for any path.
+    Page { status: u16, len: usize, hash: u64 },
+    /// A redirect for any path: to the same path elsewhere (`mirror`, as an
+    /// HTTPS upgrade does), or always to `to`.
+    Redirect { status: u16, mirror: bool, to: String },
 }
 
 impl Baseline {
-    fn of(status: u16, body: &[u8]) -> Self {
+    fn page(status: u16, body: &[u8]) -> Self {
         let mut h = DefaultHasher::new();
         body.hash(&mut h);
-        Baseline {
+        Baseline::Page {
             status,
             len: body.len(),
             hash: h.finish(),
         }
     }
 
-    /// Whether an answer is the same one, byte for byte or within 2% of its
+    /// Whether a page is the same one, byte for byte or within 2% of its
     /// size (for pages that carry a token or timestamp).
-    pub fn matches(&self, status: u16, body: &[u8]) -> bool {
-        let other = Baseline::of(status, body);
-        status == self.status && (other.hash == self.hash || self.len.abs_diff(other.len) * 50 <= self.len.max(1))
+    pub fn matches_page(&self, status: u16, body: &[u8]) -> bool {
+        let (Baseline::Page { status: s, len, hash }, Baseline::Page { len: l, hash: h, .. }) = (self, Baseline::page(status, body)) else {
+            return false;
+        };
+        status == *s && (h == *hash || len.abs_diff(l) * 50 <= (*len).max(1))
+    }
+
+    /// Whether a redirect from `path` to `location` is the blanket one.
+    pub fn matches_redirect(&self, status: u16, path: &str, location: &str) -> bool {
+        let Baseline::Redirect { status: s, mirror, to } = self else {
+            return false;
+        };
+        status == *s && (location == to || (*mirror && location_path(location) == path))
+    }
+}
+
+/// The path a `Location` points at, absolute or relative, without query.
+fn location_path(location: &str) -> String {
+    match reqwest::Url::parse(location) {
+        Ok(u) => u.path().to_string(),
+        Err(_) => location.split(['?', '#']).next().unwrap_or("").to_string(),
     }
 }
 
@@ -371,11 +392,16 @@ impl Baseline {
 async fn baseline(client: &Client, base: &str) -> Option<Baseline> {
     let resp = client.get(format!("{base}{NOWHERE}")).send().await.ok()?;
     let status = resp.status().as_u16();
+    if (300..400).contains(&status) {
+        let to = header_str(&resp, "location")?;
+        let mirror = location_path(&to) == NOWHERE;
+        return Some(Baseline::Redirect { status, mirror, to });
+    }
     if !(200..300).contains(&status) {
         return None;
     }
     let body = resp.bytes().await.ok()?;
-    Some(Baseline::of(status, &body))
+    Some(Baseline::page(status, &body))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -387,7 +413,7 @@ async fn inspect_path(
     spec: &PathSpec,
     cfg: &HttpConfig,
     tls: bool,
-    soft404: Option<Baseline>,
+    soft404: Option<&Baseline>,
 ) -> Option<Endpoint> {
     let url = format!("{scheme}://{}{}", authority(host, port), spec.path);
     let resp = client.get(&url).send().await.ok()?;
@@ -403,11 +429,17 @@ async fn inspect_path(
     let headers = security_headers(&resp);
 
     // On a service that answers every path, a path answered just like one
-    // that can't exist isn't there.
-    if let Some(base) = soft404.filter(|_| status.is_success()) {
-        let body = resp.bytes().await.ok()?;
-        if base.matches(status.as_u16(), &body) {
-            return None;
+    // that can't exist isn't there. The root is always there: it's the site.
+    if let Some(base) = soft404.filter(|_| spec.path != "/") {
+        if status.is_redirection() {
+            if base.matches_redirect(status.as_u16(), &spec.path, location.as_deref().unwrap_or("")) {
+                return None;
+            }
+        } else if status.is_success() && matches!(base, Baseline::Page { .. }) {
+            let body = resp.bytes().await.ok()?;
+            if base.matches_page(status.as_u16(), &body) {
+                return None;
+            }
         }
     }
 
@@ -460,6 +492,7 @@ pub async fn inspect_service(
     };
     let tls = scheme == "https";
     let soft404 = baseline(&client, &format!("{scheme}://{}", authority(host, port))).await;
+    let soft404 = soft404.as_ref();
     let tls_report = if tls {
         Some(tls::TlsReport {
             cert: cert.as_deref().and_then(tls::parse),
@@ -553,13 +586,32 @@ mod tests {
     #[test]
     fn baseline_matches_the_same_page() {
         let page = b"<html><div id=app></div></html>".repeat(40);
-        let base = Baseline::of(200, &page);
-        assert!(base.matches(200, &page));
+        let base = Baseline::page(200, &page);
+        assert!(base.matches_page(200, &page));
         let mut nonce = page.clone();
         nonce.extend_from_slice(b"<!-- 1a2b -->");
-        assert!(base.matches(200, &nonce));
-        assert!(!base.matches(200, b"DB_PASSWORD=hunter2"));
-        assert!(!base.matches(404, &page));
+        assert!(base.matches_page(200, &nonce));
+        assert!(!base.matches_page(200, b"DB_PASSWORD=hunter2"));
+        assert!(!base.matches_page(404, &page));
+    }
+
+    #[test]
+    fn baseline_matches_a_blanket_redirect() {
+        let upgrade = Baseline::Redirect {
+            status: 301,
+            mirror: true,
+            to: format!("https://shop.example{NOWHERE}"),
+        };
+        assert!(upgrade.matches_redirect(301, "/.env", "https://shop.example/.env"));
+        assert!(!upgrade.matches_redirect(301, "/.env", "https://shop.example/login"));
+        assert!(!upgrade.matches_redirect(302, "/.env", "https://shop.example/.env"));
+        let login = Baseline::Redirect {
+            status: 302,
+            mirror: false,
+            to: "/login".to_string(),
+        };
+        assert!(login.matches_redirect(302, "/admin", "/login"));
+        assert!(!login.matches_redirect(302, "/admin", "/admin/home"));
     }
 
     #[test]
