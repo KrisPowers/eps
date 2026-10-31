@@ -164,6 +164,7 @@ kbd {
 .page-head + .scan-nav { margin-top: -16px; }
 .scan-nav {
   display: flex; align-items: center; gap: 4px; margin-bottom: 24px; overflow-x: auto; scrollbar-width: none;
+  border-bottom: 1px solid var(--line);
 }
 .scan-nav-back, .scan-nav-item {
   position: relative; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 14px;
@@ -176,6 +177,7 @@ kbd {
   content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0;
   background: var(--accent); transform: scaleX(0); transition: transform .2s var(--ease);
 }
+.scan-nav-item .icon { color: inherit; }
 .scan-nav-item.on { color: var(--accent); }
 .scan-nav-item.on::after { transform: scaleX(1); }
 /* What changes from page to page, under a heading that stays put. */
