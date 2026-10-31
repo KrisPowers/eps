@@ -112,6 +112,8 @@ kbd {
   border-radius: 999px; color: var(--text); font-weight: 500; transition: background .12s;
 }
 .nav-item .icon { color: var(--text-2); }
+/* A little air between items, so hover and active backgrounds never touch. */
+.nav-item + .nav-item { margin-top: 4px; }
 .nav-item:hover { background: var(--hover); }
 .nav-item.on { background: var(--accent-bg); color: var(--on-accent-bg); }
 .nav-item.on .icon { color: var(--on-accent-bg); }
