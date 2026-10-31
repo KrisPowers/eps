@@ -377,11 +377,14 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 .evidence { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* A value that copies itself when clicked: plain text, underlined with dots. */
 .copy {
-  padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
-  text-decoration: underline dotted currentColor 1px; text-underline-offset: 3px;
-  transition: color .15s;
+  display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none;
+  color: inherit; font: inherit; cursor: pointer; transition: color .15s;
 }
-.copy:hover { color: var(--text); font-weight: 600; }
+.copy-text { text-decoration: underline dotted currentColor 1px; text-underline-offset: 3px; }
+.copy-icon { opacity: .65; }
+.copy:hover { color: var(--text); }
+.copy:hover .copy-text { font-weight: 600; }
+.copy:hover .copy-icon { opacity: 1; }
 .copy.done { color: var(--ok); }
 .badge.logo svg { width: 22px; height: 22px; fill: currentColor; }
 .badge.logo.big svg { width: 30px; height: 30px; }

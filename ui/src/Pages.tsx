@@ -459,8 +459,8 @@ export function Dns({ host, live: l }: { host: string; live: Live }) {
 
 const HOW: Record<string, string> = { certificate: "Certificate log", guess: "Common name" };
 
-// Copy is a value shown as plain text, underlined with dots, that copies
-// itself to the clipboard when clicked.
+// Copy is a value shown as plain text, underlined with dots and followed by
+// a small copy mark, that copies itself to the clipboard when clicked.
 function Copy({ text }: { text: string }) {
   const [done, setDone] = useState(false);
   useEffect(() => {
@@ -471,7 +471,8 @@ function Copy({ text }: { text: string }) {
   return (
     <button type="button" className={"copy" + (done ? " done" : "")} title={done ? "Copied" : "Copy"}
       onClick={() => navigator.clipboard?.writeText(text).then(() => setDone(true), () => {})}>
-      {text}
+      <span className="copy-text">{text}</span>
+      <Icon name="content_copy" size={14} className="copy-icon" />
     </button>
   );
 }
