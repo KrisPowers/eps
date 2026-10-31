@@ -106,45 +106,11 @@ pub async fn explore(client: &Client, base: &str, start: &[String]) -> Site {
     from_robots_and_sitemaps(client, &root, &mut seen, &mut queue).await;
 
     let mut scripts: Vec<String> = Vec::new();
-    while !queue.is_empty() && site.pages.len() < MOST_PAGES {
-        let n = queue.len().min(AT_ONCE).min(MOST_PAGES - site.pages.len());
-        let batch: Vec<(String, usize, &'static str)> = queue.drain(..n).collect();
-        let fetched = join_all(batch.iter().map(|(path, _, _)| get(client, &root, path))).await;
-        for ((path, depth, found), got) in batch.into_iter().zip(fetched) {
-            let Some(got) = got else { continue };
-            site.pages.push(Page {
-                path: path.clone(),
-                status: got.status,
-                title: got.html.as_deref().and_then(title),
-                content_type: got.content_type.clone(),
-                found,
-            });
-            if let Some(to) = got.location.as_deref().and_then(|l| got.url.join(l).ok()) {
-                if !same_site(&root, &to) && (300..400).contains(&got.status) {
-                    site.signals.push(Signal {
-                        category: "Redirects and frames",
-                        label: format!("Redirects to {}", to.host_str().unwrap_or("another site")),
-                        severity: "medium",
-                        why: "Opening this path sends you on to a different site.",
-                        evidence: format!("{} to {to}", got.status),
-                        page: path.clone(),
-                        script: None,
-                    });
-                }
-            }
-            let Some(html) = got.html else { continue };
-            read_page(&mut site, &root, &got.url, &path, &html, &mut scripts);
-            if depth < DEEPEST {
-                for link in values(&html, "a", "href") {
-                    if let Some(next) = local_path(&root, &got.url, link) {
-                        enqueue(&mut seen, &mut queue, next, depth + 1, "link");
-                    }
-                }
-            }
-        }
-    }
+    crawl(client, &root, &mut site, &mut seen, &mut queue, &mut scripts, true).await;
 
-    // Every script the pages load, from this site or any other.
+    // Every script the pages load, from this site or any other. The site's
+    // own scripts also name its routes, which a single-page app never links
+    // in its markup.
     scripts.truncate(MOST_SCRIPTS);
     for chunk in scripts.chunks(AT_ONCE) {
         let bodies = join_all(chunk.iter().map(|u| body(client, u))).await;
@@ -159,11 +125,109 @@ pub async fn explore(client: &Client, base: &str, start: &[String]) -> Site {
             trackers(url, &page, Some(url), &mut site.signals);
             if let Some(code) = code {
                 read_code(&code, &page, Some(url), &mut site.signals);
+                if !third_party {
+                    for route in routes(&code) {
+                        enqueue(&mut seen, &mut queue, route, DEEPEST, "script");
+                    }
+                }
             }
         }
     }
+    crawl(client, &root, &mut site, &mut seen, &mut queue, &mut scripts, false).await;
     dedupe(&mut site.signals);
     site
+}
+
+/// Fetches what's queued, recording each path. When `read`, each page's
+/// markup is read too and its links followed, up to [`MOST_PAGES`];
+/// otherwise the paths are only recorded, up to as many again.
+async fn crawl(
+    client: &Client,
+    root: &Url,
+    site: &mut Site,
+    seen: &mut HashSet<String>,
+    queue: &mut VecDeque<(String, usize, &'static str)>,
+    scripts: &mut Vec<String>,
+    read: bool,
+) {
+    let most = if read { MOST_PAGES } else { MOST_PAGES * 2 };
+    while !queue.is_empty() && site.pages.len() < most {
+        let n = queue.len().min(AT_ONCE).min(most - site.pages.len());
+        let batch: Vec<(String, usize, &'static str)> = queue.drain(..n).collect();
+        let fetched = join_all(batch.iter().map(|(path, _, _)| get(client, root, path))).await;
+        for ((path, depth, found), got) in batch.into_iter().zip(fetched) {
+            let Some(got) = got else { continue };
+            site.pages.push(Page {
+                path: path.clone(),
+                status: got.status,
+                title: got.html.as_deref().and_then(title),
+                content_type: got.content_type.clone(),
+                found,
+            });
+            if let Some(to) = got.location.as_deref().and_then(|l| got.url.join(l).ok()) {
+                if !same_site(root, &to) && (300..400).contains(&got.status) {
+                    site.signals.push(Signal {
+                        category: "Redirects and frames",
+                        label: format!("Redirects to {}", to.host_str().unwrap_or("another site")),
+                        severity: "medium",
+                        why: "Opening this path sends you on to a different site.",
+                        evidence: format!("{} to {to}", got.status),
+                        page: path.clone(),
+                        script: None,
+                    });
+                }
+            }
+            let Some(html) = got.html.filter(|_| read) else { continue };
+            read_page(site, root, &got.url, &path, &html, scripts);
+            if depth < DEEPEST {
+                for link in values(&html, "a", "href") {
+                    if let Some(next) = local_path(root, &got.url, link) {
+                        enqueue(seen, queue, next, depth + 1, "link");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Paths a script names as string literals, `"/docs/install"`: the routes a
+/// single-page app knows but never links in its markup.
+fn routes(code: &str) -> Vec<String> {
+    const MOST: usize = 200;
+    let bytes = code.as_bytes();
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i + 2 < bytes.len() && out.len() < MOST {
+        let quote = bytes[i];
+        if matches!(quote, b'"' | b'\'' | b'`') && bytes[i + 1] == b'/' {
+            let start = i + 1;
+            let mut j = start + 1;
+            while j < bytes.len() && j - start < 100 && (bytes[j].is_ascii_alphanumeric() || b"/-_.".contains(&bytes[j])) {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == quote {
+                let path = &code[start..j];
+                if route_like(path) && !out.iter().any(|p| p == path) {
+                    out.push(path.to_string());
+                }
+                i = j + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Whether a string reads as a site's route: a letter after the slash, no
+/// `//` or `..`, and not a file such as a script or image.
+fn route_like(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    path.len() > 1
+        && path.as_bytes()[1].is_ascii_alphabetic()
+        && !path.contains("//")
+        && !path.contains("..")
+        && !ASSETS.iter().any(|ext| lower.ends_with(ext))
 }
 
 fn enqueue(
@@ -777,6 +841,12 @@ mod tests {
         assert!(labels.contains(&"Loads a hidden frame"));
         assert!(labels.contains(&"Sends a password to collect.evil"));
         assert!(labels.contains(&"Asks for a password over plain HTTP"));
+    }
+
+    #[test]
+    fn reads_routes_from_scripts() {
+        let code = r#"const r=[{path:"/docs"},{path:'/docs/install'}];go(`/blog/`);x="/assets/a.png";y="//cdn";z="/2";w="a/b""#;
+        assert_eq!(routes(code), ["/docs", "/docs/install", "/blog/"]);
     }
 
     #[test]

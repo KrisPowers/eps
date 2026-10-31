@@ -43,6 +43,60 @@ const KINDS: &[(u16, &str)] = &[
     (CAA, "CAA"),
 ];
 
+/// Names a domain's hosts commonly go by, tried as its subdomains.
+const COMMON: &[&str] = &[
+    "www", "api", "app", "admin", "dev", "staging", "stage", "test", "beta", "demo", "docs", "doc", "blog",
+    "mail", "webmail", "smtp", "imap", "pop", "ftp", "vpn", "portal", "dashboard", "status", "cdn",
+    "static", "assets", "img", "media", "files", "shop", "store", "auth", "login", "sso", "id", "accounts",
+    "git", "gitlab", "jenkins", "ci", "grafana", "kibana", "monitor", "metrics", "internal", "intranet",
+    "m", "mobile", "ws", "sandbox", "preview", "old", "legacy", "help", "support", "community", "forum",
+    "dns", "ns1", "ns2", "mx",
+];
+
+/// The domain a host belongs to: `shop.example.co.uk` is `example.co.uk`.
+/// `None` for an address, or a local name no one else could resolve.
+pub fn apex(host: &str) -> Option<String> {
+    if host.parse::<IpAddr>().is_ok() {
+        return None;
+    }
+    let labels: Vec<&str> = host.trim_end_matches('.').split('.').collect();
+    let tld = *labels.last()?;
+    if labels.len() < 2 || ["local", "localhost", "internal", "lan", "home", "test", "invalid", "example"].contains(&tld) {
+        return None;
+    }
+    let sld = labels[labels.len() - 2];
+    let three = labels.len() >= 3 && tld.len() == 2 && ["co", "com", "org", "net", "gov", "ac", "edu"].contains(&sld);
+    let n = if three { 3 } else { 2 };
+    Some(labels[labels.len() - n..].join(".").to_ascii_lowercase())
+}
+
+/// Which of `names` resolve, with their IPv4 addresses, all asked at once.
+pub async fn resolving(names: &[String]) -> Vec<(String, Vec<String>)> {
+    let Some(server) = resolver() else {
+        return Vec::new();
+    };
+    let asked = names.iter().enumerate().map(|(i, name)| async move {
+        let id = 0x6000u16.wrapping_add(i as u16);
+        (name.clone(), query(server, name, A, id).await)
+    });
+    join_all(asked)
+        .await
+        .into_iter()
+        .filter(|(_, found)| !found.is_empty())
+        .map(|(name, found)| (name, found.into_iter().map(|r| r.value).collect()))
+        .collect()
+}
+
+/// The common names under `domain` that resolve. None when the domain
+/// answers for any name at all (wildcard DNS), where a guess proves nothing.
+pub async fn guess(domain: &str) -> Vec<(String, Vec<String>)> {
+    if !resolving(&[format!("portscan-7f3a9c1e.{domain}")]).await.is_empty() {
+        return Vec::new();
+    }
+    let names: Vec<String> = COMMON.iter().map(|c| format!("{c}.{domain}")).collect();
+    resolving(&names).await
+}
+
 /// The first resolver in `/etc/resolv.conf`. `None` where there is none,
 /// such as on Windows.
 pub fn resolver() -> Option<SocketAddr> {
@@ -279,6 +333,16 @@ mod tests {
         let msg = response("example.com", A, 7, &[(A, vec![1, 2, 3, 4])]);
         assert_eq!(answers(&msg, 8, A), None);
         assert_eq!(name(&[0xc0, 0x00], 0), None);
+    }
+
+    #[test]
+    fn apex_domains() {
+        assert_eq!(apex("api.shop.example.com").as_deref(), Some("example.com"));
+        assert_eq!(apex("www.shop.co.uk").as_deref(), Some("shop.co.uk"));
+        assert_eq!(apex("trivajs.com").as_deref(), Some("trivajs.com"));
+        assert_eq!(apex("10.0.0.5"), None);
+        assert_eq!(apex("host.docker.internal"), None);
+        assert_eq!(apex("localhost"), None);
     }
 
     #[test]

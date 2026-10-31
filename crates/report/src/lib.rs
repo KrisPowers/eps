@@ -68,6 +68,57 @@ pub struct Report {
     /// a visitor's browser.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sites: Vec<SiteView>,
+    /// Other names under the target's domain; see [`Subdomain`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub subdomains: Vec<Subdomain>,
+}
+
+/// A name under the target's domain, from the certificate logs or a common
+/// name that resolves.
+#[derive(Debug, Clone, Serialize)]
+pub struct Subdomain {
+    pub name: String,
+    /// Its IPv4 addresses now; empty when it no longer resolves.
+    pub addresses: Vec<String>,
+    /// `certificate`, `guess`, or both.
+    pub found: Vec<&'static str>,
+}
+
+/// The subdomains of `host`'s domain from certificate names and resolving
+/// guesses, merged by name, the host itself left out.
+pub fn subdomains(
+    host: &str,
+    certified: &[(String, Vec<String>)],
+    unresolved: &[String],
+    guessed: &[(String, Vec<String>)],
+) -> Vec<Subdomain> {
+    let mut by: std::collections::BTreeMap<String, Subdomain> = std::collections::BTreeMap::new();
+    let mut add = |name: &str, addresses: &[String], found: &'static str| {
+        if name.eq_ignore_ascii_case(host) {
+            return;
+        }
+        let s = by.entry(name.to_string()).or_insert_with(|| Subdomain {
+            name: name.to_string(),
+            addresses: Vec::new(),
+            found: Vec::new(),
+        });
+        if s.addresses.is_empty() {
+            s.addresses = addresses.to_vec();
+        }
+        if !s.found.contains(&found) {
+            s.found.push(found);
+        }
+    };
+    for (name, addresses) in certified {
+        add(name, addresses, "certificate");
+    }
+    for name in unresolved {
+        add(name, &[], "certificate");
+    }
+    for (name, addresses) in guessed {
+        add(name, addresses, "guess");
+    }
+    by.into_values().collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -657,6 +708,7 @@ pub fn assemble(
         technologies: Vec::new(),
         dns: Vec::new(),
         addresses: Vec::new(),
+        subdomains: Vec::new(),
         sites: services
             .iter()
             .filter_map(|s| {
@@ -715,6 +767,7 @@ pub fn assemble_range(target: &str, hosts: &[(IpAddr, Vec<OpenPort>)]) -> Report
         apis: Vec::new(),
         dns: Vec::new(),
         addresses: Vec::new(),
+        subdomains: Vec::new(),
         sites: Vec::new(),
     }
 }
@@ -848,6 +901,21 @@ mod tests {
             .collect();
         assert_eq!(titles, ["SPF lets any server send", "DMARC only monitors"]);
         assert!(dns_findings("shop.example", &records[1..]).is_empty());
+    }
+
+    #[test]
+    fn subdomains_merge_by_name() {
+        let ip = vec!["1.2.3.4".to_string()];
+        let subs = subdomains(
+            "shop.example",
+            &[("api.shop.example".to_string(), ip.clone())],
+            &["old.shop.example".to_string(), "shop.example".to_string()],
+            &[("api.shop.example".to_string(), ip.clone()), ("www.shop.example".to_string(), ip)],
+        );
+        let names: Vec<&str> = subs.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["api.shop.example", "old.shop.example", "www.shop.example"]);
+        assert_eq!(subs[0].found, ["certificate", "guess"]);
+        assert!(subs[1].addresses.is_empty());
     }
 
     #[test]

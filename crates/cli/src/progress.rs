@@ -43,6 +43,8 @@ pub struct Progress {
     banners: Mutex<HashMap<u16, String>>,
     /// The DNS records and their findings, once the lookup is done.
     dns: Mutex<Value>,
+    /// The subdomains found, once the logs and guesses are in.
+    subdomains: Mutex<Value>,
 }
 
 impl Progress {
@@ -80,6 +82,10 @@ impl Progress {
 
     pub fn dns(&self, found: Value) {
         *self.dns.lock().unwrap_or_else(|e| e.into_inner()) = found;
+    }
+
+    pub fn subdomains(&self, found: Value) {
+        *self.subdomains.lock().unwrap_or_else(|e| e.into_inner()) = found;
     }
 
     pub fn banner(&self, port: u16, text: &str) {
@@ -123,6 +129,7 @@ impl Progress {
             "services_done": self.services_done.load(Ordering::Relaxed),
             "inspecting": inspecting,
             "dns": *self.dns.lock().unwrap_or_else(|e| e.into_inner()),
+            "subdomains": *self.subdomains.lock().unwrap_or_else(|e| e.into_inner()),
         })
     }
 }

@@ -171,8 +171,11 @@ const SECTIONS: Record<string, ReactNode> = {
       <Doc title="DNS">
         <p>The target's records in a table you can filter by type, asked of the resolver the dashboard uses: addresses, aliases, mail and name servers, TXT and CAA, its DMARC policy, and the reverse name of the address scanned. A domain that takes mail gets its SPF and DMARC state on one line above.</p>
       </Doc>
+      <Doc title="Subdomains">
+        <p>Other names under the target's domain: from the public certificate transparency logs, where every certificate a public authority issues is recorded, so any subdomain that ever had one shows up; and from about sixty common names (www, api, admin, staging, ...) that resolve. Guesses are skipped for a domain that answers for any name. Each says whether it still resolves, and any that does can be scanned.</p>
+      </Doc>
       <Doc title="Sitemap">
-        <p>Every path on each website the scan finds: from <code>/</code> and the path in your URL, the site's <code>robots.txt</code> (paths it disallows too) and its sitemaps, and its own links, up to 100 pages and three links deep. Each with its status and title.</p>
+        <p>Every path on each website the scan finds: from <code>/</code> and the path in your URL, the site's <code>robots.txt</code> (paths it disallows too) and its sitemaps, its own links up to three deep, and the routes its own scripts name, which a single-page app never links in its markup. Each with its status and title.</p>
       </Doc>
       <Doc title="Client-side">
         <p>What the site's pages would do in your browser, checked so you never have to open them. The scanner fetches each page and every script it loads, from the site or anywhere else, and reads them without running anything, for code that asks for your location or looks up your IP address, can reveal your local IP over WebRTC, fingerprints your device or browser, asks for your camera, microphone, sensors or clipboard, watches your keystrokes, mines cryptocurrency or hides itself; and for hidden frames, password forms that post to another site, redirects, trackers and session recorders. Serious ones show on Findings too.</p>
