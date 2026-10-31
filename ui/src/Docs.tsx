@@ -169,7 +169,7 @@ const SECTIONS: Record<string, ReactNode> = {
         <p>Any OpenAPI or Swagger document a port serves without auth at a conventional path, such as <code>/openapi.json</code> or <code>/v3/api-docs</code>, read for every operation it lists. Operations that change data with no security requirement declared are marked.</p>
       </Doc>
       <Doc title="DNS">
-        <p>The target's records in a table you can filter by type, asked of the resolver the dashboard uses: addresses, aliases, mail and name servers, TXT and CAA, its DMARC policy, and the reverse name of the address scanned. A domain that takes mail gets its SPF and DMARC state on one line above.</p>
+        <p>The target's records in a table you can filter by type, asked of the resolver the dashboard uses: addresses, aliases, mail and name servers, TXT and CAA, its DMARC policy, and the reverse name of the address scanned. A domain that takes mail gets its SPF and DMARC state on one line under the table.</p>
       </Doc>
       <Doc title="Subdomains">
         <p>Other names under the target's domain: from the public certificate transparency logs (Cert Spotter and crt.sh, asked at once), where every certificate a public authority issues is recorded, so any subdomain that ever had one shows up; from about sixty common names (www, api, admin, staging, ...) that resolve; and from the site's own links. Guesses are skipped for a domain that answers for any name. Each says whether it still resolves, and any that does can be scanned.</p>

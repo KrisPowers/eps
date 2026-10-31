@@ -411,6 +411,11 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 /* Filter chips above a list. */
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .filters.inline { margin: 0; justify-content: flex-end; }
+/* One filter bar: tabs on the left, a compact dropdown on the right. */
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.bar:empty { display: none; }
+.bar .filters { margin: 0; }
+.bar .dropdown { margin-left: auto; min-width: 0; height: 32px; padding: 0 6px 0 14px; font-size: 13px; }
 .filter {
   display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 8px;
   background: transparent; color: var(--text-2); font: 500 13px var(--font); cursor: pointer; transition: background .12s;

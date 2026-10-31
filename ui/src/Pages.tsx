@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { api } from "./api";
+import { Dropdown } from "./Dropdown";
 import { Icon } from "./Icon";
 import { logo } from "./logos";
 import { Fold, usePaged } from "./paged";
@@ -403,8 +404,8 @@ const ttl = (s: number) => (s < 120 ? `${s} s` : s < 7200 ? `${Math.round(s / 60
 const ORDER = ["A", "AAAA", "CNAME", "MX", "NS", "TXT", "CAA", "PTR"];
 
 // Dns is the target's records as a table, filtered by type, a page at a
-// time. A domain that takes mail gets its SPF and DMARC state on one line,
-// and the findings, which name no port, fold under the table.
+// time. A domain that takes mail gets its SPF and DMARC state on one line
+// under the table, and the findings, which name no port, fold under that.
 export function Dns({ host, live: l }: { host: string; live: Live }) {
   const [kind, setKind] = useState("");
   const all = [...(l.dns ?? [])].sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
@@ -421,12 +422,6 @@ export function Dns({ host, live: l }: { host: string; live: Live }) {
   const kinds = ORDER.filter((k) => all.some((r) => r.kind === k));
   return (
     <>
-      {all.some((r) => r.kind === "MX") && (
-        <p className="summary-line">
-          <span>SPF {state(spf, !!spf && /(^|\s)\+?all(\s|$)/.test(spf))}</span>
-          <span>DMARC {state(dmarc, !!dmarc && /p\s*=\s*none/.test(dmarc))}</span>
-        </p>
-      )}
       <Tabs all={kinds} value={kind} onChange={setKind} counts={(k) => (k ? all.filter((r) => r.kind === k).length : all.length)} />
       <div className="card">
         <div className="table-wrap">
@@ -446,6 +441,12 @@ export function Dns({ host, live: l }: { host: string; live: Live }) {
         </div>
         {pager}
       </div>
+      {all.some((r) => r.kind === "MX") && (
+        <p className="summary-line gap-top">
+          <span>SPF {state(spf, !!spf && /(^|\s)\+?all(\s|$)/.test(spf))}</span>
+          <span>DMARC {state(dmarc, !!dmarc && /p\s*=\s*none/.test(dmarc))}</span>
+        </p>
+      )}
       {notes.length > 0 && (
         <div className="card folds gap-top">
           {notes.map((f, k) => <FindingFold key={k} finding={f} />)}
@@ -555,8 +556,8 @@ function linkedSites(sites: Site[], host: string): Site[] {
 }
 
 // Sitemap is every path mapped on the site: from its start and your URL,
-// its robots.txt and sitemaps, and its own links, a page at a time,
-// filtered by how each was found, and by site when there are several.
+// its robots.txt and sitemaps, and its own links, a page at a time. One
+// bar filters it: by site when there are several, and by how each was found.
 export function Sitemap({ live: l, host }: { live: Live; host: string }) {
   const [base, setBase] = useState("");
   const [found, setFound] = useState("");
@@ -571,13 +572,16 @@ export function Sitemap({ live: l, host }: { live: Live; host: string }) {
   }
   return (
     <>
-      {every.length > 1 && (
+      <div className="bar">
         <Tabs all={every.map((s) => s.base)} value={base} onChange={setBase}
           counts={(b) => (b ? every.find((s) => s.base === b)?.pages.length ?? 0 : every.reduce((n, s) => n + s.pages.length, 0))} />
-      )}
-      <Tabs all={ways.map((k) => FOUND[k])} value={found ? FOUND[found] : ""}
-        onChange={(v) => setFound(ways.find((k) => FOUND[k] === v) ?? "")}
-        counts={(v) => (v ? all.filter((p) => FOUND[p.found] === v).length : all.length)} />
+        {ways.length > 1 && (
+          <Dropdown label="Found by" value={found}
+            options={[{ value: "", label: "Found by any", hint: plural(all.length, "path") },
+              ...ways.map((k) => ({ value: k, label: FOUND[k], hint: plural(all.filter((p) => p.found === k).length, "path") }))]}
+            onChange={setFound} />
+        )}
+      </div>
       <div className="card">
         <div className="table-wrap">
           <table className="table">
