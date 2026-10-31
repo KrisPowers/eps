@@ -84,7 +84,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
         : page === "software" ? (item ? <SoftwareDetail id={scan.id} live={found} name={item} /> : <Software id={scan.id} live={found} />)
         : page === "api" ? (item ? <ApiDetail id={scan.id} live={found} index={item} /> : <Apis id={scan.id} live={found} />)
         : page === "dns" ? <Dns host={host} live={found} />
-        : page === "subdomains" ? <Subdomains live={found} onScan={onScan} />
+        : page === "subdomains" ? <Subdomains live={found} />
         : page === "sitemap" ? <Sitemap live={found} />
         : page === "client" ? (item ? <ClientDetail id={scan.id} live={found} category={item} /> : <Client id={scan.id} live={found} />)
         : range && report ? <Hosts report={report} onScan={onScan} />
