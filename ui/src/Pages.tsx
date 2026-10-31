@@ -459,10 +459,28 @@ export function Dns({ host, live: l }: { host: string; live: Live }) {
 
 const HOW: Record<string, string> = { certificate: "Certificate log", guess: "Common name" };
 
+// Copy is a value shown as plain text, underlined with dots, that copies
+// itself to the clipboard when clicked.
+function Copy({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => setDone(false), 1200);
+    return () => clearTimeout(t);
+  }, [done]);
+  return (
+    <button type="button" className={"copy" + (done ? " done" : "")} title={done ? "Copied" : "Copy"}
+      onClick={() => navigator.clipboard?.writeText(text).then(() => setDone(true), () => {})}>
+      {text}
+    </button>
+  );
+}
+
 // Subdomains is the other names under the target's domain: from the public
 // certificate logs, where every certificate issued is recorded, and common
-// names that resolve. Live ones first, a page at a time; any can be scanned.
-export function Subdomains({ live: l, onScan }: { live: Live; onScan: (command: string) => void }) {
+// names that resolve. Live ones first, a page at a time; each name and
+// address copies when clicked.
+export function Subdomains({ live: l }: { live: Live }) {
   const [show, setShow] = useState("");
   const all = [...(l.subdomains ?? [])].sort((a, b) => Number(!a.addresses.length) - Number(!b.addresses.length) || a.name.localeCompare(b.name));
   const LIVE = "Resolving";
@@ -481,14 +499,17 @@ export function Subdomains({ live: l, onScan }: { live: Live; onScan: (command: 
       <div className="card">
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th className="grow">Name</th><th>Addresses</th><th>Found in</th><th /></tr></thead>
+            <thead><tr><th className="grow">Name</th><th>Addresses</th><th>Found in</th></tr></thead>
             <tbody>
               {shown.map((s) => (
                 <tr key={s.name}>
-                  <td className="mono">{s.name}</td>
-                  <td className="mono muted">{s.addresses.length ? s.addresses.join(", ") : "Not resolving"}</td>
+                  <td className="mono"><Copy text={s.name} /></td>
+                  <td className="mono muted">
+                    {s.addresses.length
+                      ? s.addresses.map((a, i) => <span key={a}>{i > 0 && ", "}<Copy text={a} /></span>)
+                      : "Not resolving"}
+                  </td>
                   <td className="muted">{s.found.map((f) => HOW[f] ?? f).join(", ")}</td>
-                  <td>{s.addresses.length > 0 && <button type="button" className="btn" onClick={() => onScan("@ " + s.name)}>Scan</button>}</td>
                 </tr>
               ))}
             </tbody>
