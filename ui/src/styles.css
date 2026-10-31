@@ -578,6 +578,17 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 .btn.danger:hover { background: var(--bad-bg); }
 .btn.danger.armed { border-color: var(--bad); background: var(--bad); color: var(--on-bad); }
 
+/* ---- settings and docs: sections flow as plain text, no boxes ---- */
+.flow { gap: 36px; }
+.flow .card { background: none; border-radius: 0; overflow: visible; }
+.flow .card-head { padding: 0 0 6px; }
+.flow .card-head h2 { font-size: 16px; font-weight: 500; }
+.flow .setting { border-top: 0; padding: 10px 0; min-height: 0; }
+.flow .doc { padding: 0; gap: 10px; }
+.flow .doc .table-wrap { margin: 0; }
+.flow .preview { padding: 0; }
+.flow .tally-item { padding: 0; background: none; }
+
 /* ---- docs ---- */
 .bullets { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--text-2); }
 .doc h3 { font-size: 16px; font-weight: 500; }

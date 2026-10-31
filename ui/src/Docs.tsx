@@ -77,7 +77,7 @@ export function Docs({ section }: { section: string }) {
           <div className="page-sub">How to scan, and how to read what comes back</div>
         </div>
       </div>
-      <article className="page-body docs" key={key}>
+      <article className="page-body docs flow" key={key}>
         <h2 className="doc-title">{title}</h2>
         {SECTIONS[key]}
       </article>

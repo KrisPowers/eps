@@ -28,7 +28,7 @@ export function Settings({ section, scans, onChanged }: { section: string; scans
           <div className="page-sub">Kept in this browser, apart from the scans, which the dashboard keeps</div>
         </div>
       </div>
-      <div className="page-body stack" key={key}>
+      <div className="page-body stack flow" key={key}>
         <h2 className="doc-title">{title}</h2>
         {key === "appearance" && <Appearance />}
         {key === "scanning" && <Scanning />}
