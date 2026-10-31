@@ -147,7 +147,20 @@ pub(crate) async fn scan_target(
         host: target.host.clone(),
         url_host: target.url_host(),
         rendered_ip: rendered_ip.clone(),
-        http: (!opts.no_discovery).then(|| build_http_config(opts)),
+        http: (!opts.no_discovery).then(|| {
+            let mut cfg = build_http_config(opts);
+            // A URL's own path is checked along with the usual ones.
+            if let Some(path) = &target.path {
+                if !cfg.paths.iter().any(|p| &p.path == path) {
+                    cfg.paths.push(PathSpec {
+                        path: path.clone(),
+                        sensitive: false,
+                        note: "from the URL".to_string(),
+                    });
+                }
+            }
+            cfg
+        }),
         connect: opts.connect_timeout,
         slots: Semaphore::new(SERVICES_AT_ONCE),
         progress,
@@ -217,6 +230,9 @@ pub(crate) async fn scan_target(
     }
     report.technologies = report::technologies(&report.open_ports, &services);
     report::add_dns(&mut report, &target.host, &records);
+    if ips.len() > 1 {
+        report.addresses = ips.iter().map(ToString::to_string).collect();
+    }
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {
         report,

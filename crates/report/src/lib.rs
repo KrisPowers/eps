@@ -59,6 +59,10 @@ pub struct Report {
     /// The target's DNS records; see [`add_dns`].
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub dns: Vec<DnsView>,
+    /// Every address a name resolved to, when there were several; the scan
+    /// went to the first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub addresses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -614,6 +618,7 @@ pub fn assemble(
         hosts: Vec::new(),
         technologies: Vec::new(),
         dns: Vec::new(),
+        addresses: Vec::new(),
         apis: services
             .iter()
             .flat_map(|s| {
@@ -662,6 +667,7 @@ pub fn assemble_range(target: &str, hosts: &[(IpAddr, Vec<OpenPort>)]) -> Report
         technologies: Vec::new(),
         apis: Vec::new(),
         dns: Vec::new(),
+        addresses: Vec::new(),
     }
 }
 
