@@ -152,7 +152,7 @@ export function App() {
         </nav>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} />}
 
-        <main className="page" key={view + id}>
+        <main className={"page" + (view === "docs" ? " wide" : "")} key={view + id}>
           {view === "docs" && <Docs section={section} />}
           {view === "settings" && <Settings section={section} scans={scans} onChanged={load} />}
           {view === "scan" && selected && (
