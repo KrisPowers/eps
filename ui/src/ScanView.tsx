@@ -132,10 +132,8 @@ function Results({ id, items }: { id: string; items: Item[] }) {
           const software = item.found?.technologies?.[0];
           return (
             <a key={item.port} className="tile-card" href={href(id, item.port)}>
-              {software
-                ? <Badge name={software.name} kind={software.kind} />
-                : <span className={"badge sev " + (worst ? SEVERITY[worst] : "ok")} aria-hidden="true"><Icon name="shield" /></span>}
-              <span className="tile-title">{item.port}<small>/tcp</small></span>
+              {software && <Badge name={software.name} kind={software.kind} />}
+              <span className="tile-title">{item.port}<span className="proto">TCP</span></span>
               <span className="tile-sub">{software ? software.name : item.service}</span>
               <span className="tile-foot">
                 {item.state !== "done"
