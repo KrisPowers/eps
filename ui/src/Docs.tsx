@@ -161,20 +161,17 @@ const SECTIONS: Record<string, ReactNode> = {
   ),
   pages: (
     <>
-      <Doc title="Technologies">
-        <p>The software recognized on each port, from what the scan already saw: <code>Server</code> and <code>X-Powered-By</code> headers, session cookie names, paths only one product answers, and service greetings. Versions show where the software names them.</p>
+      <Doc title="Software">
+        <p>The software recognized on each port, from what the scan already saw: <code>Server</code> and <code>X-Powered-By</code> headers, session cookie names, paths only one product answers, and service greetings. Versions show where the software names them. Each opens a page of the ports it was seen on.</p>
       </Doc>
       <Doc title="API">
         <p>Any OpenAPI or Swagger document a port serves without auth at a conventional path, such as <code>/openapi.json</code> or <code>/v3/api-docs</code>, read for every operation it lists. Operations that change data with no security requirement declared are marked.</p>
       </Doc>
       <Doc title="DNS">
-        <p>The target's records, asked of the resolver the dashboard uses: addresses, aliases, mail and name servers, TXT and CAA, its DMARC policy, and the reverse name of the address scanned. A domain that takes mail is checked for SPF and DMARC.</p>
+        <p>The target's records in a table you can filter by type, asked of the resolver the dashboard uses: addresses, aliases, mail and name servers, TXT and CAA, its DMARC policy, and the reverse name of the address scanned. A domain that takes mail gets its SPF and DMARC state on one line above.</p>
       </Doc>
       <Doc title="History">
-        <p>Every kept scan of the same target, with a bar per finished scan of what it found, so a trend shows at a glance.</p>
-      </Doc>
-      <Doc title="Changes">
-        <p>What differs from the last finished scan of the same target: ports that opened or closed, findings that are new or resolved.</p>
+        <p>Every kept scan of the same target, newest first, with what it found. Open a scan to see what changed from the one before it: ports that opened or closed, findings that are new or resolved. The scan running counts what it has found so far.</p>
       </Doc>
     </>
   ),

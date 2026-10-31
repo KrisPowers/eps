@@ -3,20 +3,20 @@
 // another page of it, `#/<id>/<page>/<item>` one thing on that page, and
 // `#/<id>/<port>` one port of it.
 
-export type Page = "findings" | "tech" | "api" | "dns" | "history" | "changes";
+export type Page = "findings" | "software" | "api" | "dns" | "history";
 
 export interface Route {
   id: string;
   view: "scans" | "docs" | "settings" | "scan";
   page: Page;
   port: number | null;
-  // One thing on a page: a technology, an API document, a record type.
+  // One thing on a page: a piece of software, an API document.
   item: string | null;
   // A section of the docs or settings.
   section: string;
 }
 
-const PAGES: Page[] = ["findings", "tech", "api", "dns", "history", "changes"];
+const PAGES: Page[] = ["findings", "software", "api", "dns", "history"];
 
 export function readHash(): Route {
   const [first = "", second = "", third = ""] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);

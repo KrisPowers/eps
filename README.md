@@ -16,7 +16,7 @@ command:
   or 1.1, found with a ClientHello offering only that version.
 - **Headers** - for each endpoint, its security headers (HSTS, CSP, framing
   protection, `nosniff`, CORS) and the flags on any cookie it sets.
-- **Technologies** - the software recognized on each port (web server,
+- **Software** - the software recognized on each port (web server,
   language, framework, database, SSH and mail servers, with versions where
   shown), from headers, cookie names, product-specific paths and greetings.
 - **API** - any OpenAPI or Swagger document served without auth at a
@@ -61,13 +61,13 @@ The `?` beside it opens the docs, and the gear opens Settings: the theme, the
 options every new scan starts with, exporting every scan at once, and clearing
 the finished ones.
 
-Your scans are listed as cards. A scan opens on its **Findings**: a count per
-severity, then every open port, worst first. Each port opens its own page with
-the findings on it and its endpoints, with the same verdict blocks as the CLI.
-**History** charts every kept scan of the same target. **Changes** compares it
-with the last scan of the same target: ports opened or
-closed, findings new or resolved. **Export** downloads it as JSON, Markdown or
-SARIF. Inside a scan, the sidebar's back button returns to the scans. While the scan
+Your scans are listed a page at a time. A scan opens on its **Findings**: one
+line of what it found, then every open port, worst first, a page at a time.
+Each port opens its own page with its findings, certificate and endpoints, each
+folded to one line until you open it. **Software**, **API** and **DNS** fill in
+while the scan runs. **History** lists every scan of the same target; opening
+one shows what changed from the one before it. **Export** downloads it as JSON,
+Markdown or SARIF. Inside a scan, the sidebar's back button returns to the scans. While the scan
 runs, a pill carries the port being scanned, and each port shows as soon as it
 is done.
 The last 100 scans are kept in `%LOCALAPPDATA%\portscan\data` on Windows,

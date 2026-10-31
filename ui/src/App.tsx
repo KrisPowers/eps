@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as KeyEven
 import { api } from "./api";
 import { DOCS, Docs } from "./Docs";
 import { withDefaults } from "./prefs";
+import { usePaged } from "./paged";
 import { SETTINGS, Settings } from "./Settings";
 import { Icon, type IconName } from "./Icon";
 import { go, href, readHash } from "./route";
-import { Card, isRange, results, ScanView, SEVERITY } from "./ScanView";
+import { isRange, results, ScanView, SEVERITY } from "./ScanView";
 import type { Progress, Report, ScanRow, Severity } from "./types";
 
 // App is the frame every page sits in: a header with the search bar, help
@@ -129,13 +130,12 @@ export function App() {
                     : <NavItem to={href(selected.id)} icon="shield" label="Findings" on={page === "findings"} />}
                   {!isRange(selected) && (
                     <>
-                      <NavItem to={href(selected.id, "tech")} icon="dns" label="Technologies" on={page === "tech"} />
+                      <NavItem to={href(selected.id, "software")} icon="dns" label="Software" on={page === "software"} />
                       <NavItem to={href(selected.id, "api")} icon="lock" label="API" on={page === "api"} />
                       <NavItem to={href(selected.id, "dns")} icon="language" label="DNS" on={page === "dns"} />
                     </>
                   )}
                   <NavItem to={href(selected.id, "history")} icon="history" label="History" on={page === "history"} />
-                  <NavItem to={href(selected.id, "changes")} icon="difference" label="Changes" on={page === "changes"} />
                 </>
               )}
             </>
@@ -182,9 +182,10 @@ function NavItem({ to, icon, label, on }: { to: string; icon: IconName; label: s
   );
 }
 
-// Home is the scans kept, newest first, a card each with what it found,
-// opening the scan's findings.
+// Home is the scans kept, newest first, a row each with the worst of what it
+// found, a page at a time, each opening the scan.
 function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: string; onScan: (command: string) => Promise<void> }) {
+  const { shown, pager } = usePaged(scans ?? [], 12);
   return (
     <>
       <div className="page-head">
@@ -205,32 +206,23 @@ function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: st
         </div>
       )}
       {scans && scans.length > 0 && (
-        <div className="cards wide">
-          {scans.map((s) => (
-            <Card key={s.id}
-              title={<a className="card-link" href={href(s.id)}><Mark scan={s} /><span>{s.command.replace(/^@\s*/, "") || s.target}</span></a>}
-              sub={<>{ago(s.created)}{s.resolved_ip && s.resolved_ip !== s.target && <> · <span className="mono">{s.resolved_ip}</span></>}</>}
-              action={<a className="card-action" href={href(s.id)}>Open</a>}>
-              {s.status === "done" ? (
-                <>
-                  <div className="stats">
-                    {isRange(s) ? (
-                      <div className="stat"><b>{s.hosts ?? 0}</b><span>Hosts up</span></div>
-                    ) : (
-                      <>
-                        <div className="stat"><b>{s.open_ports}</b><span>Open ports</span></div>
-                        <div className="stat"><b>{s.endpoints}</b><span>Endpoints</span></div>
-                      </>
-                    )}
-                    <div className="stat"><b>{Object.values(s.findings).reduce((n, c) => n + c, 0)}</b><span>Findings</span></div>
-                  </div>
-                  <div className="card-foot"><Severities counts={s.findings} /></div>
-                </>
-              ) : (
-                <div className="card-foot muted">{s.status === "failed" ? "Failed" : s.status === "queued" ? "Queued" : "Scanning"}</div>
-              )}
-            </Card>
-          ))}
+        <div className="card">
+          <ul className="results">
+            {shown.map((s) => (
+              <li key={s.id}>
+                <a className="result scan-row" href={href(s.id)}>
+                  <Mark scan={s} />
+                  <span className="scan-target">{s.command.replace(/^@\s*/, "") || s.target}</span>
+                  <span className="result-what">
+                    {s.status === "done" ? <Severities counts={s.findings} /> : <span className="muted">{s.status === "failed" ? "Failed" : s.status === "queued" ? "Queued" : "Scanning"}</span>}
+                  </span>
+                  <span className="result-meta">{ago(s.created)}</span>
+                  <Icon name="chevron_right" className="result-go" />
+                </a>
+              </li>
+            ))}
+          </ul>
+          {pager}
         </div>
       )}
     </>
