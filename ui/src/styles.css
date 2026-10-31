@@ -150,7 +150,7 @@ kbd {
   margin-left: clamp(0px, calc(50vw - min(640px, 50%) - var(--left)), calc(100% - min(1280px, 100%)));
 }
 /* Help's text runs the width of the window; every other page keeps its column. */
-.page.wide { max-width: none; }
+.page.wide { max-width: none; margin-left: 0; }
 
 /* The page's heading: its title, a line of facts under it, its actions on
    the right, and a rule below. */
