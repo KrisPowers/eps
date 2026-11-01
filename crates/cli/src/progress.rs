@@ -62,7 +62,10 @@ impl Progress {
         self.ports_done.fetch_add(1, Ordering::Relaxed);
         self.port.fetch_max(port as usize, Ordering::Relaxed);
         if open {
-            self.open.lock().unwrap_or_else(|e| e.into_inner()).push(port);
+            self.open
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(port);
         }
     }
 
@@ -72,12 +75,18 @@ impl Progress {
     }
 
     pub fn inspecting(&self, port: u16) {
-        self.inspecting.lock().unwrap_or_else(|e| e.into_inner()).insert(port);
+        self.inspecting
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(port);
     }
 
     pub fn inspected(&self, port: u16) {
         self.services_done.fetch_add(1, Ordering::Relaxed);
-        self.inspecting.lock().unwrap_or_else(|e| e.into_inner()).remove(&port);
+        self.inspecting
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&port);
     }
 
     pub fn dns(&self, found: Value) {

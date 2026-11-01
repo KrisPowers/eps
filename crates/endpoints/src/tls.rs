@@ -341,12 +341,20 @@ mod tests {
             tlv(0xa3, &tlv(0x30, &san)),
         ]
         .concat();
-        tlv(0x30, &[tlv(0x30, &tbs), tlv(0x30, &[]), tlv(0x03, &[0])].concat())
+        tlv(
+            0x30,
+            &[tlv(0x30, &tbs), tlv(0x30, &[]), tlv(0x03, &[0])].concat(),
+        )
     }
 
     #[test]
     fn reads_a_certificate() {
-        let c = parse(&cert("Example CA", "api.example", &["api.example", "*.example"])).unwrap();
+        let c = parse(&cert(
+            "Example CA",
+            "api.example",
+            &["api.example", "*.example"],
+        ))
+        .unwrap();
         assert_eq!(c.subject, "api.example");
         assert_eq!(c.issuer, "Example CA");
         assert_eq!(c.names, ["api.example", "*.example"]);
@@ -383,9 +391,14 @@ mod tests {
 
     #[test]
     fn server_hello_must_match_version() {
-        let hello = [0x16, 0x03, 0x01, 0x00, 0x30, 0x02, 0x00, 0x00, 0x2c, 0x03, 0x01];
+        let hello = [
+            0x16, 0x03, 0x01, 0x00, 0x30, 0x02, 0x00, 0x00, 0x2c, 0x03, 0x01,
+        ];
         assert!(server_hello(&hello, 1));
         assert!(!server_hello(&hello, 2));
-        assert!(!server_hello(&[0x15, 0x03, 0x01, 0x00, 0x02, 0x02, 0x46], 1));
+        assert!(!server_hello(
+            &[0x15, 0x03, 0x01, 0x00, 0x02, 0x02, 0x46],
+            1
+        ));
     }
 }

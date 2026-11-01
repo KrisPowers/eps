@@ -217,7 +217,9 @@ pub(crate) fn hsts(ep: &Endpoint) -> Posture {
 /// script. Only a page needs one.
 pub(crate) fn csp(ep: &Endpoint) -> Posture {
     match &ep.headers.csp {
-        Some(v) if v.contains("'unsafe-inline'") || v.contains("'unsafe-eval'") => Posture::Insecure,
+        Some(v) if v.contains("'unsafe-inline'") || v.contains("'unsafe-eval'") => {
+            Posture::Insecure
+        }
         Some(_) => Posture::Configured,
         None if html(ep) => Posture::Missing,
         None => Posture::Unknown,
@@ -367,7 +369,11 @@ fn is_range(report: &Report) -> bool {
 fn host_section(paint: Paint, report: &Report, out: &mut String) {
     heading(paint, "HOSTS", "", out);
     if report.hosts.is_empty() {
-        notice(paint, "No host in the range answered on a common port.", out);
+        notice(
+            paint,
+            "No host in the range answered on a common port.",
+            out,
+        );
         return;
     }
     for h in &report.hosts {
@@ -447,7 +453,10 @@ fn tech_section(paint: Paint, report: &Report, out: &mut String) {
         };
         row.add("", &fit(&name, 30));
         row.pad_to(43);
-        row.add(ACCENT, &fit(&format!("{}, {}", t.kind, t.evidence), WIDTH - 43));
+        row.add(
+            ACCENT,
+            &fit(&format!("{}, {}", t.kind, t.evidence), WIDTH - 43),
+        );
         row.finish(out);
     }
 }
@@ -477,7 +486,10 @@ fn api_section(paint: Paint, report: &Report, out: &mut String) {
         }
         if a.spec.operations.len() > SHOWN {
             let mut row = Row::new(paint);
-            row.add(ACCENT, &format!("and {} more", a.spec.operations.len() - SHOWN));
+            row.add(
+                ACCENT,
+                &format!("and {} more", a.spec.operations.len() - SHOWN),
+            );
             row.finish(out);
         }
     }
@@ -516,7 +528,11 @@ fn site_section(paint: Paint, report: &Report, out: &mut String) {
         );
         row.finish(out);
         if site.signals.is_empty() {
-            notice(paint, "Nothing found that reaches into a visitor's browser.", out);
+            notice(
+                paint,
+                "Nothing found that reaches into a visitor's browser.",
+                out,
+            );
             continue;
         }
         let rank = |sev: &str| match sev {
@@ -551,10 +567,16 @@ fn tls_section(paint: Paint, report: &Report, out: &mut String) {
         if let Some(c) = &tls.cert {
             let mut row = Row::new(paint);
             row.add("1", &fit(&c.subject, WIDTH / 2));
-            row.add(ACCENT, &fit(&format!("  issued by {}", c.issuer), WIDTH / 2));
+            row.add(
+                ACCENT,
+                &fit(&format!("  issued by {}", c.issuer), WIDTH / 2),
+            );
             row.finish(out);
             let mut row = Row::new(paint);
-            row.add("", &format!("valid {} to {}", date(c.not_before), date(c.not_after)));
+            row.add(
+                "",
+                &format!("valid {} to {}", date(c.not_before), date(c.not_after)),
+            );
             if c.self_signed {
                 row.add("1;33", "  self-signed");
             }

@@ -27,6 +27,23 @@ pub mod paths;
 pub mod site;
 pub mod tls;
 
+/// The most of a response body any check reads. A service can answer with
+/// an endless or decompression-bomb body; the scan keeps only this much.
+pub const MOST_BODY: usize = 8 * 1024 * 1024;
+
+/// A response's body, read up to `max` bytes and no further.
+pub async fn capped(mut resp: reqwest::Response, max: usize) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    while let Some(chunk) = resp.chunk().await.ok()? {
+        let room = max - out.len();
+        out.extend_from_slice(&chunk[..chunk.len().min(room)]);
+        if out.len() >= max {
+            break;
+        }
+    }
+    Some(out)
+}
+
 /// Response headers that indicate rate limiting is advertised or active.
 const RATE_LIMIT_HEADERS: &[&str] = &[
     "ratelimit-limit",
@@ -76,7 +93,8 @@ impl Default for HttpConfig {
             active_rate_probe: false,
             active_rate_count: 15,
             strict_tls: false,
-            user_agent: concat!("portscan/", env!("CARGO_PKG_VERSION"), " (read-only recon)").to_string(),
+            user_agent: concat!("eps/", env!("CARGO_PKG_VERSION"), " (read-only recon)")
+                .to_string(),
             start: Vec::new(),
         }
     }
@@ -336,7 +354,7 @@ async fn active_rate_probe(client: &Client, url: &str, count: usize) -> (usize, 
 
 /// A path no site has, asked for to see how the service answers what isn't
 /// there.
-const NOWHERE: &str = "/portscan-7f3a9c1e-no-such-path";
+const NOWHERE: &str = "/eps-7f3a9c1e-no-such-path";
 
 /// How a service answers a path that can't exist. A single-page app or
 /// catch-all serves the same page for every path, and an HTTP service that
@@ -348,7 +366,11 @@ pub enum Baseline {
     Page { status: u16, len: usize, hash: u64 },
     /// A redirect for any path: to the same path elsewhere (`mirror`, as an
     /// HTTPS upgrade does), or always to `to`.
-    Redirect { status: u16, mirror: bool, to: String },
+    Redirect {
+        status: u16,
+        mirror: bool,
+        to: String,
+    },
 }
 
 impl Baseline {
@@ -365,7 +387,17 @@ impl Baseline {
     /// Whether a page is the same one, byte for byte or within 2% of its
     /// size (for pages that carry a token or timestamp).
     pub fn matches_page(&self, status: u16, body: &[u8]) -> bool {
-        let (Baseline::Page { status: s, len, hash }, Baseline::Page { len: l, hash: h, .. }) = (self, Baseline::page(status, body)) else {
+        let (
+            Baseline::Page {
+                status: s,
+                len,
+                hash,
+            },
+            Baseline::Page {
+                len: l, hash: h, ..
+            },
+        ) = (self, Baseline::page(status, body))
+        else {
             return false;
         };
         status == *s && (h == *hash || len.abs_diff(l) * 50 <= (*len).max(1))
@@ -373,7 +405,12 @@ impl Baseline {
 
     /// Whether a redirect from `path` to `location` is the blanket one.
     pub fn matches_redirect(&self, status: u16, path: &str, location: &str) -> bool {
-        let Baseline::Redirect { status: s, mirror, to } = self else {
+        let Baseline::Redirect {
+            status: s,
+            mirror,
+            to,
+        } = self
+        else {
             return false;
         };
         status == *s && (location == to || (*mirror && location_path(location) == path))
@@ -400,7 +437,7 @@ async fn baseline(client: &Client, base: &str) -> Option<Baseline> {
     if !(200..300).contains(&status) {
         return None;
     }
-    let body = resp.bytes().await.ok()?;
+    let body = capped(resp, MOST_BODY).await?;
     Some(Baseline::page(status, &body))
 }
 
@@ -432,11 +469,15 @@ async fn inspect_path(
     // that can't exist isn't there. The root is always there: it's the site.
     if let Some(base) = soft404.filter(|_| spec.path != "/") {
         if status.is_redirection() {
-            if base.matches_redirect(status.as_u16(), &spec.path, location.as_deref().unwrap_or("")) {
+            if base.matches_redirect(
+                status.as_u16(),
+                &spec.path,
+                location.as_deref().unwrap_or(""),
+            ) {
                 return None;
             }
         } else if status.is_success() && matches!(base, Baseline::Page { .. }) {
-            let body = resp.bytes().await.ok()?;
+            let body = capped(resp, MOST_BODY).await?;
             if base.matches_page(status.as_u16(), &body) {
                 return None;
             }
@@ -524,10 +565,10 @@ pub async fn inspect_service(
         let Ok(resp) = client.get(&ep.url).send().await else {
             continue;
         };
-        let Ok(body) = resp.text().await else {
+        let Some(body) = capped(resp, MOST_BODY).await else {
             continue;
         };
-        if let Some(spec) = api::parse(&ep.url, &body) {
+        if let Some(spec) = api::parse(&ep.url, &String::from_utf8_lossy(&body)) {
             let same = |a: &api::ApiSpec| a.title == spec.title && a.operations == spec.operations;
             if !apis.iter().any(same) {
                 apis.push(spec);
@@ -535,7 +576,12 @@ pub async fn inspect_service(
         }
     }
 
-    let site = site::explore(&client, &format!("{scheme}://{}", authority(host, port)), &cfg.start).await;
+    let site = site::explore(
+        &client,
+        &format!("{scheme}://{}", authority(host, port)),
+        &cfg.start,
+    )
+    .await;
 
     Ok(ServiceReport {
         port,

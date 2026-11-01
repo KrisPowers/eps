@@ -6,3 +6,4 @@ Formula
 **/node_modules
 # Rebuilt from ui/ inside the image.
 ui/dist
+docs

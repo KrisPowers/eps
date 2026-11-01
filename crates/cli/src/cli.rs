@@ -64,7 +64,7 @@ pub struct Cli {
     pub fail_on_high: bool,
 
     /// Run the dashboard on this address instead of scanning: a web page for
-    /// starting scans and reading their reports (see README).
+    /// starting scans and reading their reports (see docs/dashboard.md).
     #[arg(long, value_name = "ADDR")]
     pub serve: Option<String>,
 

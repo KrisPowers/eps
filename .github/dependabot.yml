@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      crates:
+        patterns: ["*"]
+
+  # The dashboard's dependencies.
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: monthly
+    groups:
+      dashboard:
+        patterns: ["*"]
+
+  # Base images.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

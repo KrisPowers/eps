@@ -193,9 +193,9 @@ function About() {
   }, []);
   return (
     <>
-      <Card title="portscan" sub="Read-only reconnaissance: open ports, endpoints and their posture">
+      <Card title="EPS" sub="Read-only reconnaissance: open ports, endpoints and their posture">
         <Row title="Version"><span className="mono">{version || "Unknown"}</span></Row>
-        <Row title="Source" sub="Issues, releases and the CLI"><a className="btn" href="https://github.com/KrisPowers/portscan" target="_blank" rel="noreferrer">GitHub</a></Row>
+        <Row title="Source" sub="Issues, releases and the CLI"><a className="btn" href="https://github.com/KrisPowers/eps" target="_blank" rel="noreferrer">GitHub</a></Row>
         <Row title="License"><span>Apache 2.0</span></Row>
       </Card>
       <Card title="This dashboard">

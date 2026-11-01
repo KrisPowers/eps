@@ -1,4 +1,4 @@
-//! `portscan --serve <addr>`: the dashboard. Serves the built web page from
+//! `eps --serve <addr>`: the dashboard. Serves the built web page from
 //! `--web` and the API it runs on:
 //!
 //! - `GET /api/scans`: every kept scan, newest first, with counts, and for
@@ -11,11 +11,11 @@
 //! - `GET /health`: whether it's up, and its version
 //!
 //! There is no sign-in, so only requests addressed to this computer
-//! (`localhost`, `127.0.0.1`, `[::1]`) are answered; `PORTSCAN_HOSTS` adds
+//! (`localhost`, `127.0.0.1`, `[::1]`) are answered; `EPS_HOSTS` adds
 //! more names. That also stops a web page from reaching the API by pointing
 //! its own domain at this computer.
 //!
-//! In a container, `localhost` is the container itself. `PORTSCAN_LOCALHOST`
+//! In a container, `localhost` is the container itself. `EPS_LOCALHOST`
 //! names the host to scan instead when a scan asks for `localhost`, such as
 //! `host.docker.internal`.
 
@@ -38,8 +38,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::{Mutex, Semaphore};
 
-use crate::progress::Progress;
 use crate::cli::Cli;
+use crate::progress::Progress;
 use crate::{scan_options, scan_target, ScanOptions};
 
 /// Scans kept, newest first; older ones are dropped.
@@ -154,7 +154,7 @@ impl App {
     }
 
     /// The target a scan actually runs against: `localhost` swapped for
-    /// `PORTSCAN_LOCALHOST`, when that is set.
+    /// `EPS_LOCALHOST`, when that is set.
     fn scan_target(&self, target: &Target, raw: &str) -> String {
         let Some(alias) = &self.localhost else {
             return raw.to_string();
@@ -187,7 +187,7 @@ pub async fn run(addr: &str, web: Option<PathBuf>, data: Option<PathBuf>) -> any
     let mut hosts: Vec<String> = ["localhost", "127.0.0.1", "[::1]"]
         .map(String::from)
         .to_vec();
-    if let Ok(extra) = std::env::var("PORTSCAN_HOSTS") {
+    if let Ok(extra) = std::env::var("EPS_HOSTS") {
         hosts.extend(
             extra
                 .split(',')
@@ -195,7 +195,7 @@ pub async fn run(addr: &str, web: Option<PathBuf>, data: Option<PathBuf>) -> any
                 .filter(|h| !h.is_empty()),
         );
     }
-    let localhost = std::env::var("PORTSCAN_LOCALHOST")
+    let localhost = std::env::var("EPS_LOCALHOST")
         .ok()
         .filter(|h| !h.trim().is_empty());
     let app = Arc::new(App {
@@ -219,7 +219,7 @@ pub async fn run(addr: &str, web: Option<PathBuf>, data: Option<PathBuf>) -> any
         .layer(middleware::from_fn_with_state(app.clone(), local_only))
         .with_state(app);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    eprintln!("portscan: dashboard on http://{addr}");
+    eprintln!("eps: dashboard on http://{addr}");
     axum::serve(listener, router).await?;
     Ok(())
 }
@@ -240,7 +240,7 @@ async fn local_only(State(app): State<Arc<App>>, req: Request, next: Next) -> Re
     if req.uri().path() != "/health" && !app.hosts.iter().any(|h| h == name) {
         return error(
             StatusCode::FORBIDDEN,
-            "open the dashboard at localhost, or add this name to PORTSCAN_HOSTS",
+            "open the dashboard at localhost, or add this name to EPS_HOSTS",
         );
     }
     next.run(req).await
@@ -280,6 +280,9 @@ async fn static_file(State(app): State<Arc<App>>, uri: Uri) -> Response {
             (header::CONTENT_TYPE, content_type(&path)),
             (header::CACHE_CONTROL, cache),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            // No other site may frame the dashboard to click its buttons.
+            (header::X_FRAME_OPTIONS, "DENY"),
+            (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'none'"),
         ],
         body,
     )
@@ -354,7 +357,7 @@ fn parse_command(line: &str) -> Result<Cli, String> {
     let argv = std::iter::once("@").chain(words);
     let args = Cli::try_parse_from(argv).map_err(|e| match e.kind() {
         ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
-            "the options are listed in the README".to_string()
+            "the options are listed in docs/cli.md".to_string()
         }
         _ => {
             let text = e.to_string();

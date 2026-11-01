@@ -177,7 +177,7 @@ function Home({ scans, problem, onScan }: { scans: ScanRow[] | null; problem: st
         </div>
       </div>
       {problem && !scans && (
-        <div className="callout bad"><Icon name="error" /><span>Can't reach portscan: {problem}</span></div>
+        <div className="callout bad"><Icon name="error" /><span>Can't reach EPS: {problem}</span></div>
       )}
       {scans && scans.length === 0 && (
         <div className="card welcome">

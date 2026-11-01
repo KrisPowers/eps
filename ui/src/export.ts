@@ -88,6 +88,6 @@ function sarif(r: Report) {
   return {
     $schema: "https://json.schemastore.org/sarif-2.1.0.json",
     version: "2.1.0",
-    runs: [{ tool: { driver: { name: "portscan", informationUri: "https://github.com/KrisPowers/portscan", rules } }, results }],
+    runs: [{ tool: { driver: { name: "eps", informationUri: "https://github.com/KrisPowers/eps", rules } }, results }],
   };
 }

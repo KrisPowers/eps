@@ -3,11 +3,11 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.75"
 license = "Apache-2.0"
-repository = "https://github.com/KrisPowers/portscan"
+repository = "https://github.com/KrisPowers/eps"
 
 [workspace.dependencies]
 scanner = { path = "crates/scanner" }

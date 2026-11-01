@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Builds into dist, which `portscan --serve` serves with `--web ui/dist`.
+// Builds into dist, which `eps --serve` serves with `--web ui/dist`.
 // `npm run dev` proxies the API to a dashboard on the default port.
 export default defineConfig({
   plugins: [react()],

@@ -46,7 +46,14 @@ const PATHS: &[(&str, &str, &str)] = &[
 
 /// Products named in greetings, as they are written there.
 const GREETED: &[&str] = &[
-    "Postfix", "Exim", "Sendmail", "vsFTPd", "ProFTPD", "Pure-FTPd", "FileZilla Server", "Dovecot",
+    "Postfix",
+    "Exim",
+    "Sendmail",
+    "vsFTPd",
+    "ProFTPD",
+    "Pure-FTPd",
+    "FileZilla Server",
+    "Dovecot",
     "MariaDB",
 ];
 
@@ -76,11 +83,19 @@ pub fn technologies(ports: &[PortView], services: &[ServiceReport]) -> Vec<Tech>
             }
             for c in &ep.headers.cookies {
                 if let Some((cookie, name)) = COOKIES.iter().find(|(n, _)| c.name == *n) {
-                    add(svc.port, (name.to_string(), None), format!("{cookie} cookie"));
+                    add(
+                        svc.port,
+                        (name.to_string(), None),
+                        format!("{cookie} cookie"),
+                    );
                 }
             }
             if let Some(name) = by_path(ep) {
-                add(svc.port, (name.to_string(), None), format!("{} answers", ep.path));
+                add(
+                    svc.port,
+                    (name.to_string(), None),
+                    format!("{} answers", ep.path),
+                );
             }
         }
     }
@@ -93,7 +108,11 @@ pub fn technologies(ports: &[PortView], services: &[ServiceReport]) -> Vec<Tech>
 }
 
 fn by_path(ep: &Endpoint) -> Option<&'static str> {
-    let ct = ep.content_type.as_deref().unwrap_or("").to_ascii_lowercase();
+    let ct = ep
+        .content_type
+        .as_deref()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     PATHS
         .iter()
         .find(|(path, want, _)| ep.path == *path && ct.contains(*want))
@@ -198,13 +217,22 @@ mod tests {
     #[test]
     fn greetings() {
         let ssh = greeting("SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13", "ssh");
-        assert_eq!(ssh, Some(("OpenSSH".to_string(), Some("9.6p1".to_string()))));
+        assert_eq!(
+            ssh,
+            Some(("OpenSSH".to_string(), Some("9.6p1".to_string())))
+        );
         let ftp = greeting("220 (vsFTPd 3.0.5)", "ftp");
         assert_eq!(ftp, Some(("vsFTPd".to_string(), Some("3.0.5".to_string()))));
         let maria = greeting("5.5.5-10.6.12-MariaDB-0ubuntu0.22.04.1", "mysql");
-        assert_eq!(maria, Some(("MariaDB".to_string(), Some("10.6.12".to_string()))));
+        assert_eq!(
+            maria,
+            Some(("MariaDB".to_string(), Some("10.6.12".to_string())))
+        );
         let mysql = greeting("8.0.36", "mysql");
-        assert_eq!(mysql, Some(("MySQL".to_string(), Some("8.0.36".to_string()))));
+        assert_eq!(
+            mysql,
+            Some(("MySQL".to_string(), Some("8.0.36".to_string())))
+        );
         assert_eq!(greeting("+OK ready", "pop3"), None);
     }
 

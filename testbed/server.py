@@ -1,4 +1,4 @@
-"""Local target for trying portscan against something app-shaped.
+"""Local target for trying EPS against something app-shaped.
 
 Serves a spread of conventional endpoints behind different security setups:
 open, HTTP Basic, Bearer JWT, forbidden, login redirects, advertised and

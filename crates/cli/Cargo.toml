@@ -14,7 +14,7 @@ categories = ["command-line-utilities"]
 # typed command is `@`. A crate or binary can't be named `@`: rustc reads
 # `@`-prefixed arguments as argument files.
 [[bin]]
-name = "portscan"
+name = "eps"
 path = "src/main.rs"
 
 [dependencies]
