@@ -2,7 +2,7 @@
 # serves. With arguments it runs one scan instead, like the CLI:
 # `docker run --rm ghcr.io/krispowers/eps 192.168.1.10`.
 
-FROM --platform=$BUILDPLATFORM node:24.22.1-alpine AS ui
+FROM --platform=$BUILDPLATFORM node:26.13.0-alpine AS ui
 WORKDIR /src/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
