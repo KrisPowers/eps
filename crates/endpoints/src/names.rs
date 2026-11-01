@@ -11,12 +11,19 @@ use serde_json::Value;
 
 /// Names kept, at most.
 const MOST: usize = 500;
+/// The most of a log search's answer read; a busy domain's runs to tens of
+/// megabytes, and past this it is left unread.
+const LOG_BODY: usize = 64 * 1024 * 1024;
 
 /// Every name under `domain` that a logged certificate covers, wildcards
 /// as their domain; empty when neither log answers.
 pub async fn from_certificates(domain: &str) -> Vec<String> {
     let Ok(client) = Client::builder()
-        .user_agent(concat!("portscan/", env!("CARGO_PKG_VERSION"), " (read-only recon)"))
+        .user_agent(concat!(
+            "eps/",
+            env!("CARGO_PKG_VERSION"),
+            " (read-only recon)"
+        ))
         .build()
     else {
         return Vec::new();
@@ -37,10 +44,10 @@ async fn rows(client: &Client, url: &str, wait: Duration) -> Vec<Value> {
     let Ok(resp) = client.get(url).timeout(wait).send().await else {
         return Vec::new();
     };
-    let Ok(text) = resp.text().await else {
+    let Some(body) = crate::capped(resp, LOG_BODY).await else {
         return Vec::new();
     };
-    serde_json::from_str(&text).unwrap_or_default()
+    serde_json::from_slice(&body).unwrap_or_default()
 }
 
 /// The names in the rows that sit under `domain`, each once: crt.sh lists
@@ -50,8 +57,17 @@ fn names(rows: &[Value], domain: &str) -> Vec<String> {
     let mut out: Vec<String> = rows
         .iter()
         .flat_map(|r| {
-            let mut found: Vec<&str> = r["name_value"].as_str().map(|v| v.split('\n').collect()).unwrap_or_default();
-            found.extend(r["dns_names"].as_array().into_iter().flatten().filter_map(Value::as_str));
+            let mut found: Vec<&str> = r["name_value"]
+                .as_str()
+                .map(|v| v.split('\n').collect())
+                .unwrap_or_default();
+            found.extend(
+                r["dns_names"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str),
+            );
             found
         })
         .map(|n| n.trim().trim_start_matches("*.").to_ascii_lowercase())
@@ -73,6 +89,9 @@ mod tests {
             r#"[{"name_value":"api.shop.example\n*.shop.example"},{"name_value":"API.shop.example"},{"name_value":"shop.example.evil"},{"dns_names":["docs.shop.example","*.shop.example"]}]"#,
         )
         .unwrap();
-        assert_eq!(names(&rows, "shop.example"), ["api.shop.example", "docs.shop.example", "shop.example"]);
+        assert_eq!(
+            names(&rows, "shop.example"),
+            ["api.shop.example", "docs.shop.example", "shop.example"]
+        );
     }
 }

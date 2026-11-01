@@ -30,9 +30,9 @@ const AT_ONCE: usize = 8;
 
 /// Paths not worth fetching as pages: images, styles, fonts, media, archives.
 const ASSETS: &[&str] = &[
-    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".avif", ".css", ".js", ".mjs", ".map",
-    ".woff", ".woff2", ".ttf", ".otf", ".eot", ".pdf", ".zip", ".gz", ".tar", ".mp4", ".webm",
-    ".mp3", ".wav", ".avi", ".mov", ".dmg", ".exe", ".iso",
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".avif", ".css", ".js", ".mjs",
+    ".map", ".woff", ".woff2", ".ttf", ".otf", ".eot", ".pdf", ".zip", ".gz", ".tar", ".mp4",
+    ".webm", ".mp3", ".wav", ".avi", ".mov", ".dmg", ".exe", ".iso",
 ];
 
 /// One path on the site.
@@ -110,11 +110,20 @@ fn link_out(site: &mut Site, root: &Url, url: Url) {
 /// Absolute web addresses a script names as string literals.
 fn addresses(code: &str) -> Vec<&str> {
     let mut out = Vec::new();
-    for scheme in ["\"https://", "'https://", "`https://", "\"http://", "'http://", "`http://"] {
+    for scheme in [
+        "\"https://",
+        "'https://",
+        "`https://",
+        "\"http://",
+        "'http://",
+        "`http://",
+    ] {
         let quote = &scheme[..1];
         let mut from = 0;
         while let Some(i) = code[from..].find(scheme).map(|i| i + from + 1) {
-            let Some(end) = code[i..].find(quote).map(|e| e + i) else { break };
+            let Some(end) = code[i..].find(quote).map(|e| e + i) else {
+                break;
+            };
             if end - i < 300 {
                 out.push(&code[i..end]);
             }
@@ -143,7 +152,16 @@ pub async fn explore(client: &Client, base: &str, start: &[String]) -> Site {
     from_robots_and_sitemaps(client, &root, &mut seen, &mut queue).await;
 
     let mut scripts: Vec<String> = Vec::new();
-    crawl(client, &root, &mut site, &mut seen, &mut queue, &mut scripts, true).await;
+    crawl(
+        client,
+        &root,
+        &mut site,
+        &mut seen,
+        &mut queue,
+        &mut scripts,
+        true,
+    )
+    .await;
 
     // Every script the pages load, from this site or any other. The site's
     // own scripts also name its routes, which a single-page app never links
@@ -175,7 +193,16 @@ pub async fn explore(client: &Client, base: &str, start: &[String]) -> Site {
             }
         }
     }
-    crawl(client, &root, &mut site, &mut seen, &mut queue, &mut scripts, false).await;
+    crawl(
+        client,
+        &root,
+        &mut site,
+        &mut seen,
+        &mut queue,
+        &mut scripts,
+        false,
+    )
+    .await;
     dedupe(&mut site.signals);
     site
 }
@@ -219,7 +246,9 @@ async fn crawl(
                     });
                 }
             }
-            let Some(html) = got.html.filter(|_| read) else { continue };
+            let Some(html) = got.html.filter(|_| read) else {
+                continue;
+            };
             read_page(site, root, &got.url, &path, &html, scripts);
             for link in values(&html, "a", "href") {
                 match local_path(root, &got.url, link) {
@@ -248,7 +277,10 @@ fn routes(code: &str) -> Vec<String> {
         if matches!(quote, b'"' | b'\'' | b'`') && bytes[i + 1] == b'/' {
             let start = i + 1;
             let mut j = start + 1;
-            while j < bytes.len() && j - start < 100 && (bytes[j].is_ascii_alphanumeric() || b"/-_.".contains(&bytes[j])) {
+            while j < bytes.len()
+                && j - start < 100
+                && (bytes[j].is_ascii_alphanumeric() || b"/-_.".contains(&bytes[j]))
+            {
                 j += 1;
             }
             if j < bytes.len() && bytes[j] == quote {
@@ -304,7 +336,9 @@ async fn from_robots_and_sitemaps(
     if let Some(robots) = root.join("/robots.txt").ok().map(|u| u.to_string()) {
         if let Some(text) = body(client, &robots).await {
             for line in text.lines() {
-                let Some((key, value)) = line.split_once(':') else { continue };
+                let Some((key, value)) = line.split_once(':') else {
+                    continue;
+                };
                 let value = value.trim();
                 match key.trim().to_ascii_lowercase().as_str() {
                     "disallow" | "allow" if value.starts_with('/') && !value.contains('*') => {
@@ -329,10 +363,14 @@ async fn from_robots_and_sitemaps(
             break;
         }
         read += 1;
-        let Some(xml) = body(client, map.as_str()).await else { continue };
+        let Some(xml) = body(client, map.as_str()).await else {
+            continue;
+        };
         let index = xml.contains("<sitemapindex");
         for loc in between(&xml, "<loc>", "</loc>") {
-            let Ok(u) = Url::parse(loc.trim()) else { continue };
+            let Ok(u) = Url::parse(loc.trim()) else {
+                continue;
+            };
             if !same_origin(root, &u) {
                 continue;
             }
@@ -358,11 +396,17 @@ struct Got {
 async fn get(client: &Client, root: &Url, path: &str) -> Option<Got> {
     let url = root.join(path).ok()?;
     let resp = client.get(url.clone()).send().await.ok()?;
-    let header = |name: &str| resp.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
+    let header = |name: &str| {
+        resp.headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
     let content_type = header("content-type");
     let location = header("location");
     let status = resp.status().as_u16();
-    let page = resp.status().is_success() && content_type.as_deref().is_some_and(|t| t.contains("html"));
+    let page =
+        resp.status().is_success() && content_type.as_deref().is_some_and(|t| t.contains("html"));
     let html = if page { read(resp).await } else { None };
     Some(Got {
         url,
@@ -383,8 +427,8 @@ async fn body(client: &Client, url: &str) -> Option<String> {
 }
 
 async fn read(resp: reqwest::Response) -> Option<String> {
-    let bytes = resp.bytes().await.ok()?;
-    Some(String::from_utf8_lossy(&bytes[..bytes.len().min(BIGGEST)]).into_owned())
+    let bytes = crate::capped(resp, BIGGEST).await?;
+    Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn same_origin(a: &Url, b: &Url) -> bool {
@@ -397,7 +441,10 @@ fn same_origin(a: &Url, b: &Url) -> bool {
 /// port, `www.` aside: moving from HTTP to HTTPS, or to `www.`, isn't
 /// leaving the site.
 fn same_site(a: &Url, b: &Url) -> bool {
-    let name = |u: &Url| u.host_str().map(|h| h.trim_start_matches("www.").to_ascii_lowercase());
+    let name = |u: &Url| {
+        u.host_str()
+            .map(|h| h.trim_start_matches("www.").to_ascii_lowercase())
+    };
     name(a) == name(b)
 }
 
@@ -405,7 +452,12 @@ fn same_site(a: &Url, b: &Url) -> bool {
 fn local_path(root: &Url, page: &Url, link: &str) -> Option<String> {
     let link = link.trim();
     let lower = link.to_ascii_lowercase();
-    if link.is_empty() || link.starts_with('#') || ["mailto:", "tel:", "javascript:", "data:"].iter().any(|s| lower.starts_with(*s)) {
+    if link.is_empty()
+        || link.starts_with('#')
+        || ["mailto:", "tel:", "javascript:", "data:"]
+            .iter()
+            .any(|s| lower.starts_with(*s))
+    {
         return None;
     }
     let u = page.join(link).ok()?;
@@ -423,7 +475,14 @@ fn first_page_with(site: &Site, url: &str) -> String {
 
 /// Reads one page's markup: the scripts it loads, its inline code, hidden
 /// frames, password forms and redirects.
-fn read_page(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, scripts: &mut Vec<String>) {
+fn read_page(
+    site: &mut Site,
+    root: &Url,
+    url: &Url,
+    path: &str,
+    html: &str,
+    scripts: &mut Vec<String>,
+) {
     let lower = html.to_ascii_lowercase();
     for (tag, inner) in elements(html, &lower, "script") {
         match value(tag, "src") {
@@ -453,9 +512,18 @@ fn read_page(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, scr
     }
     for (tag, _) in elements(html, &lower, "iframe") {
         let t = tag.to_ascii_lowercase().replace(' ', "");
-        let hidden = ["display:none", "visibility:hidden", "width=\"0\"", "height=\"0\"", "width=0", "height=0", "width=\"1\"", "height=\"1\""]
-            .iter()
-            .any(|h| t.contains(*h));
+        let hidden = [
+            "display:none",
+            "visibility:hidden",
+            "width=\"0\"",
+            "height=\"0\"",
+            "width=0",
+            "height=0",
+            "width=\"1\"",
+            "height=\"1\"",
+        ]
+        .iter()
+        .any(|h| t.contains(*h));
         if hidden {
             site.signals.push(Signal {
                 category: "Redirects and frames",
@@ -468,10 +536,14 @@ fn read_page(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, scr
             });
         }
     }
-    let password = ["type=\"password\"", "type='password'", "type=password"].iter().any(|p| lower.contains(*p));
+    let password = ["type=\"password\"", "type='password'", "type=password"]
+        .iter()
+        .any(|p| lower.contains(*p));
     if password {
         for (tag, _) in elements(html, &lower, "form") {
-            let Some(to) = value(tag, "action").and_then(|a| url.join(a.trim()).ok()) else { continue };
+            let Some(to) = value(tag, "action").and_then(|a| url.join(a.trim()).ok()) else {
+                continue;
+            };
             if !same_site(root, &to) {
                 site.signals.push(Signal {
                     category: "Forms",
@@ -489,7 +561,8 @@ fn read_page(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, scr
                 category: "Forms",
                 label: "Asks for a password over plain HTTP".to_string(),
                 severity: "medium",
-                why: "Anything typed into this page travels unencrypted and can be read on the way.",
+                why:
+                    "Anything typed into this page travels unencrypted and can be read on the way.",
                 evidence: "<input type=\"password\">".to_string(),
                 page: path.to_string(),
                 script: None,
@@ -498,9 +571,16 @@ fn read_page(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, scr
     }
     for (tag, _) in elements(html, &lower, "meta") {
         let refresh = value(tag, "http-equiv").is_some_and(|v| v.eq_ignore_ascii_case("refresh"));
-        let Some(content) = value(tag, "content").filter(|_| refresh) else { continue };
-        let target = content.to_ascii_lowercase().find("url=").map(|i| content[i + 4..].trim_matches(['\'', '"', ' ']));
-        let Some(to) = target.and_then(|t| url.join(t).ok()) else { continue };
+        let Some(content) = value(tag, "content").filter(|_| refresh) else {
+            continue;
+        };
+        let target = content
+            .to_ascii_lowercase()
+            .find("url=")
+            .map(|i| content[i + 4..].trim_matches(['\'', '"', ' ']));
+        let Some(to) = target.and_then(|t| url.join(t).ok()) else {
+            continue;
+        };
         if !same_site(root, &to) {
             site.signals.push(Signal {
                 category: "Redirects and frames",
@@ -660,13 +740,16 @@ const RULES: &[Rule] = &[
 fn read_code(code: &str, page: &str, script: Option<&str>, out: &mut Vec<Signal>) {
     for rule in RULES {
         let mut first = None;
-        let matched = rule.all.iter().all(|group| match group.iter().find_map(|n| code.find(*n)) {
-            Some(i) => {
-                first.get_or_insert(i);
-                true
-            }
-            None => false,
-        });
+        let matched = rule
+            .all
+            .iter()
+            .all(|group| match group.iter().find_map(|n| code.find(*n)) {
+                Some(i) => {
+                    first.get_or_insert(i);
+                    true
+                }
+                None => false,
+            });
         if let (true, Some(at)) = (matched, first) {
             out.push(Signal {
                 category: rule.category,
@@ -733,7 +816,9 @@ fn trackers(text: &str, page: &str, script: Option<&str>, out: &mut Vec<Signal>)
 /// page loaded which script.
 fn dedupe(signals: &mut Vec<Signal>) {
     let mut seen = HashSet::new();
-    signals.retain(|s| s.category != "Scripts" && seen.insert((s.label.clone(), s.page.clone(), s.script.clone())));
+    signals.retain(|s| {
+        s.category != "Scripts" && seen.insert((s.label.clone(), s.page.clone(), s.script.clone()))
+    });
 }
 
 /// About 120 characters of `text` around byte `at`, on one line.
@@ -746,7 +831,10 @@ fn around(text: &str, at: usize) -> String {
     while !text.is_char_boundary(end) {
         end += 1;
     }
-    text[start..end].split_whitespace().collect::<Vec<_>>().join(" ")
+    text[start..end]
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn snippet(tag: &str) -> String {
@@ -759,7 +847,10 @@ fn title(html: &str) -> Option<String> {
     let open = lower.find("<title")?;
     let start = open + lower[open..].find('>')? + 1;
     let end = start + lower[start..].find("</title")?;
-    let t = html[start..end].split_whitespace().collect::<Vec<_>>().join(" ");
+    let t = html[start..end]
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     (!t.is_empty()).then_some(t)
 }
 
@@ -777,10 +868,14 @@ fn elements<'a>(html: &'a str, lower: &str, name: &str) -> Vec<(&'a str, &'a str
             from = after;
             continue;
         }
-        let Some(end) = lower[after..].find('>').map(|e| e + after) else { break };
+        let Some(end) = lower[after..].find('>').map(|e| e + after) else {
+            break;
+        };
         let tag = &html[i..=end];
         let inner = if name == "script" {
-            let stop = lower[end + 1..].find(&close).map_or(html.len(), |c| c + end + 1);
+            let stop = lower[end + 1..]
+                .find(&close)
+                .map_or(html.len(), |c| c + end + 1);
             &html[end + 1..stop]
         } else {
             ""
@@ -794,7 +889,10 @@ fn elements<'a>(html: &'a str, lower: &str, name: &str) -> Vec<(&'a str, &'a str
 /// Every value of attribute `attr` on `<name>` elements.
 fn values<'a>(html: &'a str, name: &str, attr: &str) -> Vec<&'a str> {
     let lower = html.to_ascii_lowercase();
-    elements(html, &lower, name).into_iter().filter_map(|(tag, _)| value(tag, attr)).collect()
+    elements(html, &lower, name)
+        .into_iter()
+        .filter_map(|(tag, _)| value(tag, attr))
+        .collect()
 }
 
 /// An attribute's value in an opening tag, quoted or not.
@@ -802,14 +900,21 @@ fn value<'a>(tag: &'a str, attr: &str) -> Option<&'a str> {
     let lower = tag.to_ascii_lowercase();
     let mut from = 0;
     while let Some(i) = lower[from..].find(attr).map(|i| i + from) {
-        let before = lower.as_bytes().get(i.wrapping_sub(1)).copied().unwrap_or(b' ');
+        let before = lower
+            .as_bytes()
+            .get(i.wrapping_sub(1))
+            .copied()
+            .unwrap_or(b' ');
         let rest = lower[i + attr.len()..].trim_start();
         if before.is_ascii_whitespace() && rest.starts_with('=') {
             let eq = i + attr.len() + (lower[i + attr.len()..].len() - rest.len());
             let v = tag[eq + 1..].trim_start();
             return Some(match v.chars().next() {
                 Some(q @ ('"' | '\'')) => v[1..].split(q).next().unwrap_or(""),
-                _ => v.split(|c: char| c.is_whitespace() || c == '>').next().unwrap_or(""),
+                _ => v
+                    .split(|c: char| c.is_whitespace() || c == '>')
+                    .next()
+                    .unwrap_or(""),
             });
         }
         from = i + attr.len();
@@ -822,7 +927,9 @@ fn between<'a>(text: &'a str, open: &str, close: &str) -> Vec<&'a str> {
     let mut out = Vec::new();
     let mut from = 0;
     while let Some(i) = text[from..].find(open).map(|i| i + from + open.len()) {
-        let Some(j) = text[i..].find(close).map(|j| j + i) else { break };
+        let Some(j) = text[i..].find(close).map(|j| j + i) else {
+            break;
+        };
         out.push(&text[i..j]);
         from = j + close.len();
     }
@@ -835,15 +942,29 @@ mod tests {
 
     #[test]
     fn reads_attributes() {
-        assert_eq!(value(r#"<a class="x" href="/about">"#, "href"), Some("/about"));
-        assert_eq!(value("<a href=/plain target=_blank>", "href"), Some("/plain"));
+        assert_eq!(
+            value(r#"<a class="x" href="/about">"#, "href"),
+            Some("/about")
+        );
+        assert_eq!(
+            value("<a href=/plain target=_blank>", "href"),
+            Some("/plain")
+        );
         assert_eq!(value(r#"<a data-href="/no">"#, "href"), None);
-        assert_eq!(values(r#"<p><a href='/a'>A</a> <A HREF="/b">B</A></p>"#, "a", "href"), ["/a", "/b"]);
+        assert_eq!(
+            values(
+                r#"<p><a href='/a'>A</a> <A HREF="/b">B</A></p>"#,
+                "a",
+                "href"
+            ),
+            ["/a", "/b"]
+        );
     }
 
     #[test]
     fn reads_scripts_and_titles() {
-        let html = r#"<title> Shop </title><script src="/app.js"></script><script>var x = 1;</script>"#;
+        let html =
+            r#"<title> Shop </title><script src="/app.js"></script><script>var x = 1;</script>"#;
         let lower = html.to_ascii_lowercase();
         let found = elements(html, &lower, "script");
         assert_eq!(found.len(), 2);
@@ -864,14 +985,24 @@ mod tests {
     #[test]
     fn rules_need_every_group() {
         let mut out = Vec::new();
-        read_code("pc = new RTCPeerConnection(); pc.onicecandidate = f;", "/", None, &mut out);
+        read_code(
+            "pc = new RTCPeerConnection(); pc.onicecandidate = f;",
+            "/",
+            None,
+            &mut out,
+        );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].category, "Network");
         let mut out = Vec::new();
         read_code("new RTCPeerConnection()", "/", None, &mut out);
         assert!(out.is_empty());
         let mut out = Vec::new();
-        read_code("navigator.geolocation.getCurrentPosition(ok)", "/", Some("https://cdn.example/a.js"), &mut out);
+        read_code(
+            "navigator.geolocation.getCurrentPosition(ok)",
+            "/",
+            Some("https://cdn.example/a.js"),
+            &mut out,
+        );
         assert_eq!(out[0].label, "Asks for your location");
         assert_eq!(out[0].script.as_deref(), Some("https://cdn.example/a.js"));
     }
@@ -903,22 +1034,49 @@ mod tests {
         for address in addresses(code) {
             link_out(&mut site, &root, Url::parse(address).unwrap());
         }
-        assert_eq!(site.links, ["https://docs.shop.example/start", "https://cdn.example/a.js"]);
+        assert_eq!(
+            site.links,
+            [
+                "https://docs.shop.example/start",
+                "https://cdn.example/a.js"
+            ]
+        );
     }
 
     #[test]
     fn upgrading_to_https_is_not_leaving() {
         let http = Url::parse("http://shop.example").unwrap();
-        assert!(same_site(&http, &Url::parse("https://shop.example/").unwrap()));
-        assert!(same_site(&http, &Url::parse("https://www.shop.example/").unwrap()));
-        assert!(!same_site(&http, &Url::parse("https://other.example/").unwrap()));
+        assert!(same_site(
+            &http,
+            &Url::parse("https://shop.example/").unwrap()
+        ));
+        assert!(same_site(
+            &http,
+            &Url::parse("https://www.shop.example/").unwrap()
+        ));
+        assert!(!same_site(
+            &http,
+            &Url::parse("https://other.example/").unwrap()
+        ));
     }
 
     #[test]
     fn finds_trackers_and_sitemap_locs() {
         let mut out = Vec::new();
-        trackers("https://static.hotjar.com/c/hotjar-1.js", "/", None, &mut out);
+        trackers(
+            "https://static.hotjar.com/c/hotjar-1.js",
+            "/",
+            None,
+            &mut out,
+        );
         assert_eq!(out[0].category, "Session recording");
-        assert_eq!(between("<url><loc>a</loc></url><url><loc>b</loc></url>", "<loc>", "</loc>"), ["a", "b"]);
+        assert_eq!(
+            between(
+                "<url><loc>a</loc></url><url><loc>b</loc></url>",
+                "<loc>",
+                "</loc>"
+            ),
+            ["a", "b"]
+        );
     }
 }
