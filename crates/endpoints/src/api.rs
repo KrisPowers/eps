@@ -52,12 +52,10 @@ impl Operation {
 /// one, such as a site's page served at every path.
 pub fn parse(url: &str, body: &str) -> Option<ApiSpec> {
     let doc: Value = serde_json::from_str(body).ok()?;
-    let spec = if let Some(v) = doc["openapi"].as_str() {
-        format!("OpenAPI {v}")
-    } else if let Some(v) = doc["swagger"].as_str() {
-        format!("Swagger {v}")
-    } else {
-        return None;
+    let spec = match (doc["openapi"].as_str(), doc["swagger"].as_str()) {
+        (Some(v), _) => format!("OpenAPI {v}"),
+        (None, Some(v)) => format!("Swagger {v}"),
+        (None, None) => return None,
     };
     let required = |v: Option<&Value>| v.and_then(Value::as_array).map(|a| !a.is_empty());
     let global = required(doc.get("security")).unwrap_or(false);
