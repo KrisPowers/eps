@@ -121,7 +121,13 @@ mod tests {
         let post = s.operations.iter().find(|o| o.method == "POST").unwrap();
         assert_eq!(post.summary, "createOrder");
         assert!(!post.secured && post.writes());
-        assert!(s.operations.iter().find(|o| o.method == "GET").unwrap().secured);
+        assert!(
+            s.operations
+                .iter()
+                .find(|o| o.method == "GET")
+                .unwrap()
+                .secured
+        );
     }
 
     #[test]

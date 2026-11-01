@@ -9,9 +9,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use endpoints::api::ApiSpec;
 use endpoints::site::Site;
-use scanner::dns::Record;
 use endpoints::tls::{Cert, TlsReport};
 use endpoints::{AuthState, Endpoint, ServiceReport};
+use scanner::dns::Record;
 use scanner::scan::OpenPort;
 use serde::Serialize;
 
@@ -147,7 +147,9 @@ pub fn add_dns(report: &mut Report, host: &str, records: &[Record]) {
     let (views, findings) = dns_report(host, records);
     report.dns = views;
     report.findings.extend(findings);
-    report.findings.sort_by_key(|f| std::cmp::Reverse(f.severity));
+    report
+        .findings
+        .sort_by_key(|f| std::cmp::Reverse(f.severity));
 }
 
 /// `host`'s DNS records as the report shows them, and their findings.
@@ -199,7 +201,10 @@ fn dns_findings(host: &str, records: &[Record]) -> Vec<Finding> {
             "No SPF record",
             format!("{host} takes mail but publishes no SPF record, so nothing says which servers may send as it. Publish a v=spf1 record."),
         ));
-    } else if spf.iter().any(|v| v.split_whitespace().any(|t| t == "+all" || t == "all")) {
+    } else if spf
+        .iter()
+        .any(|v| v.split_whitespace().any(|t| t == "+all" || t == "all"))
+    {
         out.push(finding(
             Severity::Medium,
             "SPF lets any server send",
@@ -533,7 +538,10 @@ fn site_findings(port: u16, site: &Site) -> Vec<Finding> {
                 "medium" => Severity::Medium,
                 _ => return None,
             };
-            let at = s.script.clone().unwrap_or_else(|| format!("{}{}", site.base, s.page));
+            let at = s
+                .script
+                .clone()
+                .unwrap_or_else(|| format!("{}{}", site.base, s.page));
             Some(Finding {
                 severity,
                 title: s.label.clone(),
@@ -579,17 +587,15 @@ fn endpoint_findings(svc: &ServiceReport, ep: &Endpoint) -> Vec<Finding> {
                 ),
             });
         }
-        AuthState::Open => {
-            // Non-sensitive open endpoint: note only the missing throttling, and
-            // only for API-ish surfaces, to keep health checks quiet.
-            if !ep.rate_limit.any_signal() && is_api_like(&ep.path) {
-                out.push(Finding {
-                    severity: Severity::Low,
-                    title: "No rate limiting advertised on open API endpoint".to_string(),
-                    location: loc.clone(),
-                    detail: "No RateLimit/Retry-After headers were returned. Verify throttling exists upstream to limit abuse.".to_string(),
-                });
-            }
+        // Non-sensitive open endpoint: note only the missing throttling, and
+        // only for API-ish surfaces, to keep health checks quiet.
+        AuthState::Open if !ep.rate_limit.any_signal() && is_api_like(&ep.path) => {
+            out.push(Finding {
+                severity: Severity::Low,
+                title: "No rate limiting advertised on open API endpoint".to_string(),
+                location: loc.clone(),
+                detail: "No RateLimit/Retry-After headers were returned. Verify throttling exists upstream to limit abuse.".to_string(),
+            });
         }
         AuthState::Protected if ep.sensitive => {
             // Positive signal: a sensitive path is correctly gated.
@@ -914,11 +920,22 @@ mod tests {
             "shop.example",
             &[("api.shop.example".to_string(), ip.clone())],
             &["old.shop.example".to_string(), "shop.example".to_string()],
-            &[("api.shop.example".to_string(), ip.clone()), ("www.shop.example".to_string(), ip)],
+            &[
+                ("api.shop.example".to_string(), ip.clone()),
+                ("www.shop.example".to_string(), ip),
+            ],
             &[("docs.shop.example".to_string(), Vec::new())],
         );
         let names: Vec<&str> = subs.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, ["api.shop.example", "docs.shop.example", "old.shop.example", "www.shop.example"]);
+        assert_eq!(
+            names,
+            [
+                "api.shop.example",
+                "docs.shop.example",
+                "old.shop.example",
+                "www.shop.example"
+            ]
+        );
         assert_eq!(subs[0].found, ["certificate", "guess"]);
         assert_eq!(subs[1].found, ["link"]);
         assert!(subs[2].addresses.is_empty());
