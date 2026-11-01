@@ -142,6 +142,13 @@ impl Target {
         if host.is_empty() {
             return Err(format!("missing host in `{raw}`"));
         }
+        // A name goes into URLs and lookups as it stands, so it may only
+        // hold what a host name can.
+        let name_byte =
+            |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_') || b >= 0x80;
+        if !host.bytes().all(name_byte) {
+            return Err(format!("`{host}` is not a valid host name"));
+        }
 
         let is_ipv6 = matches!(host.parse::<IpAddr>(), Ok(IpAddr::V6(_)));
         Ok(Target {
@@ -277,5 +284,12 @@ mod tests {
     fn rejects_empty() {
         assert!(Target::parse("@").is_err());
         assert!(Target::parse("").is_err());
+    }
+
+    #[test]
+    fn rejects_names_that_break_urls() {
+        assert!(Target::parse("shop.example&x=1").is_err());
+        assert!(Target::parse("shop example").is_err());
+        assert!(Target::parse("my_host.internal").is_ok());
     }
 }
