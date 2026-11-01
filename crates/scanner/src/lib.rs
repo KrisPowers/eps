@@ -1,4 +1,4 @@
-//! Core of portscan: parsing the `host[:port]` target, the well-known service
+//! Core of EPS: parsing the `host[:port]` target, the well-known service
 //! catalog, the async TCP connect port scanner, service greetings, and DNS.
 
 pub mod banner;

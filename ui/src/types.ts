@@ -1,4 +1,4 @@
-// The shapes `portscan --serve` answers with; see crates/cli/src/serve.rs
+// The shapes `eps --serve` answers with; see crates/cli/src/serve.rs
 // and the report crate.
 
 export type Status = "queued" | "running" | "done" | "failed";

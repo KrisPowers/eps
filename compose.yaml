@@ -1,15 +1,15 @@
-# portscan's dashboard in Docker. `docker compose up -d` runs the published
+# EPS's dashboard in Docker. `docker compose up -d` runs the published
 # image; from a checkout, `docker compose up -d --build` builds it here.
 # Then open http://localhost:8090 on this computer.
 #
 # Scans run from inside the container. Other hosts are reached as usual;
 # `localhost` is this computer, reached as host.docker.internal.
-name: portscan
+name: eps
 services:
-  portscan:
-    image: ghcr.io/krispowers/portscan:latest
+  eps:
+    image: ghcr.io/krispowers/eps:latest
     build: .
-    container_name: portscan
+    container_name: eps
     restart: unless-stopped
     ports:
       # This computer only: the dashboard has no sign-in.
@@ -18,9 +18,9 @@ services:
       # Docker Desktop has this name already; Linux needs it added.
       - "host.docker.internal:host-gateway"
     volumes:
-      # Kept scans: %LOCALAPPDATA%\portscan\data on Windows, ./portscan/data
+      # Kept scans: %LOCALAPPDATA%\eps\data on Windows, ./eps/data
       # next to this file elsewhere.
-      - ${LOCALAPPDATA:-.}/portscan/data:/data
+      - ${LOCALAPPDATA:-.}/eps/data:/data
     logging:
       options:
         max-size: 10m

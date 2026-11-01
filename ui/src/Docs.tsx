@@ -153,7 +153,7 @@ const SECTIONS: Record<string, ReactNode> = {
         <p>The arrows step to the ports either side, in the same order as Findings.</p>
       </Doc>
       <Doc title="Greetings">
-        <p>Services that speak first on connect, such as SSH, FTP, SMTP and MySQL, show what they said under their name, often their version. portscan only listens for it; nothing is sent.</p>
+        <p>Services that speak first on connect, such as SSH, FTP, SMTP and MySQL, show what they said under their name, often their version. EPS only listens for it; nothing is sent.</p>
       </Doc>
       <Doc title="TLS">
         <p>An HTTPS port's certificate: who it names, who issued it, the dates it is good for, the names it covers, and whether it signed itself. The port is also tried with TLS 1.0 and 1.1, each offered alone, to see whether it still accepts them.</p>
@@ -229,7 +229,7 @@ const SECTIONS: Record<string, ReactNode> = {
         </Doc>
       ))}
       <Doc>
-        <p className="muted">portscan reports exposure, never intent: it can't know whether a host is meant to be public. Severities help you triage; the call is yours.</p>
+        <p className="muted">EPS reports exposure, never intent: it can't know whether a host is meant to be public. Severities help you triage; the call is yours.</p>
       </Doc>
     </>
   ),
@@ -271,13 +271,13 @@ const SECTIONS: Record<string, ReactNode> = {
   use: (
     <>
       <Doc title="Read-only">
-        <p>portscan makes ordinary TCP connections and HTTP <code>GET</code> requests. It never writes, submits, logs in, changes or exploits anything; it reports exposure and you decide what to do about it.</p>
+        <p>EPS makes ordinary TCP connections and HTTP <code>GET</code> requests. It never writes, submits, logs in, changes or exploits anything; it reports exposure and you decide what to do about it.</p>
       </Doc>
       <Doc title="Authorized use only">
         <p>Scan only hosts you own or are explicitly allowed to test. Probing systems you don't control may be unlawful and against provider terms, even read-only. You are responsible for how you use it.</p>
       </Doc>
       <Doc title="This dashboard">
-        <p>The dashboard has no sign-in, so it only answers requests addressed to this computer. To reach it by another name, list the name in <code>PORTSCAN_HOSTS</code> and put your own sign-in in front of it.</p>
+        <p>The dashboard has no sign-in, so it only answers requests addressed to this computer. To reach it by another name, list the name in <code>EPS_HOSTS</code> and put your own sign-in in front of it.</p>
       </Doc>
     </>
   ),

@@ -45,12 +45,67 @@ const KINDS: &[(u16, &str)] = &[
 
 /// Names a domain's hosts commonly go by, tried as its subdomains.
 const COMMON: &[&str] = &[
-    "www", "api", "app", "admin", "dev", "staging", "stage", "test", "beta", "demo", "docs", "doc", "blog",
-    "mail", "webmail", "smtp", "imap", "pop", "ftp", "vpn", "portal", "dashboard", "status", "cdn",
-    "static", "assets", "img", "media", "files", "shop", "store", "auth", "login", "sso", "id", "accounts",
-    "git", "gitlab", "jenkins", "ci", "grafana", "kibana", "monitor", "metrics", "internal", "intranet",
-    "m", "mobile", "ws", "sandbox", "preview", "old", "legacy", "help", "support", "community", "forum",
-    "dns", "ns1", "ns2", "mx",
+    "www",
+    "api",
+    "app",
+    "admin",
+    "dev",
+    "staging",
+    "stage",
+    "test",
+    "beta",
+    "demo",
+    "docs",
+    "doc",
+    "blog",
+    "mail",
+    "webmail",
+    "smtp",
+    "imap",
+    "pop",
+    "ftp",
+    "vpn",
+    "portal",
+    "dashboard",
+    "status",
+    "cdn",
+    "static",
+    "assets",
+    "img",
+    "media",
+    "files",
+    "shop",
+    "store",
+    "auth",
+    "login",
+    "sso",
+    "id",
+    "accounts",
+    "git",
+    "gitlab",
+    "jenkins",
+    "ci",
+    "grafana",
+    "kibana",
+    "monitor",
+    "metrics",
+    "internal",
+    "intranet",
+    "m",
+    "mobile",
+    "ws",
+    "sandbox",
+    "preview",
+    "old",
+    "legacy",
+    "help",
+    "support",
+    "community",
+    "forum",
+    "dns",
+    "ns1",
+    "ns2",
+    "mx",
 ];
 
 /// The domain a host belongs to: `shop.example.co.uk` is `example.co.uk`.
@@ -61,11 +116,25 @@ pub fn apex(host: &str) -> Option<String> {
     }
     let labels: Vec<&str> = host.trim_end_matches('.').split('.').collect();
     let tld = *labels.last()?;
-    if labels.len() < 2 || ["local", "localhost", "internal", "lan", "home", "test", "invalid", "example"].contains(&tld) {
+    if labels.len() < 2
+        || [
+            "local",
+            "localhost",
+            "internal",
+            "lan",
+            "home",
+            "test",
+            "invalid",
+            "example",
+        ]
+        .contains(&tld)
+    {
         return None;
     }
     let sld = labels[labels.len() - 2];
-    let three = labels.len() >= 3 && tld.len() == 2 && ["co", "com", "org", "net", "gov", "ac", "edu"].contains(&sld);
+    let three = labels.len() >= 3
+        && tld.len() == 2
+        && ["co", "com", "org", "net", "gov", "ac", "edu"].contains(&sld);
     let n = if three { 3 } else { 2 };
     Some(labels[labels.len() - n..].join(".").to_ascii_lowercase())
 }
@@ -90,7 +159,10 @@ pub async fn resolving(names: &[String]) -> Vec<(String, Vec<String>)> {
 /// The common names under `domain` that resolve. None when the domain
 /// answers for any name at all (wildcard DNS), where a guess proves nothing.
 pub async fn guess(domain: &str) -> Vec<(String, Vec<String>)> {
-    if !resolving(&[format!("portscan-7f3a9c1e.{domain}")]).await.is_empty() {
+    if !resolving(&[format!("eps-7f3a9c1e.{domain}")])
+        .await
+        .is_empty()
+    {
         return Vec::new();
     }
     let names: Vec<String> = COMMON.iter().map(|c| format!("{c}.{domain}")).collect();
@@ -137,7 +209,10 @@ async fn query(server: SocketAddr, name: &str, kind: u16, id: u16) -> Vec<Record
     };
     let ask = async {
         let socket = UdpSocket::bind(local).await.ok()?;
-        socket.send_to(&question(name, kind, id), server).await.ok()?;
+        socket
+            .send_to(&question(name, kind, id), server)
+            .await
+            .ok()?;
         let mut buf = vec![0u8; 4096];
         let (n, _) = socket.recv_from(&mut buf).await.ok()?;
         answers(&buf[..n], id, kind)
@@ -163,9 +238,8 @@ fn question(name: &str, kind: u16, id: u16) -> Vec<u8> {
 
 /// The records of `kind` in a response to query `id`.
 fn answers(msg: &[u8], id: u16, kind: u16) -> Option<Vec<Record>> {
-    let word = |at: usize| -> Option<u16> {
-        Some(u16::from_be_bytes([*msg.get(at)?, *msg.get(at + 1)?]))
-    };
+    let word =
+        |at: usize| -> Option<u16> { Some(u16::from_be_bytes([*msg.get(at)?, *msg.get(at + 1)?])) };
     if msg.len() < 12 || word(0)? != id {
         return None;
     }
@@ -189,7 +263,10 @@ fn answers(msg: &[u8], id: u16, kind: u16) -> Option<Vec<Record>> {
         let Some(value) = rdata(msg, start, data, found) else {
             continue;
         };
-        let label = KINDS.iter().find(|(k, _)| *k == found).map_or("?", |(_, l)| *l);
+        let label = KINDS
+            .iter()
+            .find(|(k, _)| *k == found)
+            .map_or("?", |(_, l)| *l);
         out.push(Record {
             name: owner,
             kind: label,
@@ -318,7 +395,10 @@ mod tests {
         mx.extend_from_slice(b"mail");
         mx.extend_from_slice(&[0xc0, 0x0c]);
         let msg = response("example.com", MX, 9, &[(MX, mx)]);
-        assert_eq!(answers(&msg, 9, MX).unwrap()[0].value, "10 mail.example.com");
+        assert_eq!(
+            answers(&msg, 9, MX).unwrap()[0].value,
+            "10 mail.example.com"
+        );
 
         let mut txt = vec![6];
         txt.extend_from_slice(b"v=spf1");
@@ -347,7 +427,10 @@ mod tests {
 
     #[test]
     fn reverse_names() {
-        assert_eq!(reverse("10.0.0.5".parse().unwrap()), "5.0.0.10.in-addr.arpa");
+        assert_eq!(
+            reverse("10.0.0.5".parse().unwrap()),
+            "5.0.0.10.in-addr.arpa"
+        );
         assert!(reverse("::1".parse().unwrap()).starts_with("1.0.0.0."));
     }
 }

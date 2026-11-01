@@ -1,5 +1,5 @@
-//! portscan - a read-only reconnaissance CLI. The compiled binary is
-//! `portscan`; it is installed as `@`, which is the command you type.
+//! EPS, the Exposure and Posture Scanner: a read-only reconnaissance CLI. The compiled binary is
+//! `eps`; it is installed as `@`, which is the command you type.
 //!
 //! Point it at a single host and it reports what is
 //! exposed: open ports, discoverable HTTP endpoints, and whether those
@@ -54,7 +54,10 @@ async fn run(args: Cli) -> anyhow::Result<ExitCode> {
     if args.json {
         println!("{}", serde_json::to_string_pretty(&out.report)?);
     } else {
-        print!("{}", report::render_human(&out.report, &out.services, out.pinned));
+        print!(
+            "{}",
+            report::render_human(&out.report, &out.services, out.pinned)
+        );
     }
 
     let has_high = out
@@ -265,7 +268,9 @@ pub(crate) async fn scan_target(
             .filter_map(|s| s.site.as_ref())
             .flat_map(|s| s.links.iter())
             .filter_map(|u| link_host(u))
-            .filter(|h| (h.ends_with(&under) || h == domain) && !h.eq_ignore_ascii_case(&target.host))
+            .filter(|h| {
+                (h.ends_with(&under) || h == domain) && !h.eq_ignore_ascii_case(&target.host)
+            })
             .collect();
         linked.sort();
         linked.dedup();
@@ -273,11 +278,15 @@ pub(crate) async fn scan_target(
         let linked: Vec<(String, Vec<String>)> = linked
             .into_iter()
             .map(|h| {
-                let found = resolved.iter().find(|(n, _)| *n == h).map(|(_, a)| a.clone());
+                let found = resolved
+                    .iter()
+                    .find(|(n, _)| *n == h)
+                    .map(|(_, a)| a.clone());
                 (h, found.unwrap_or_default())
             })
             .collect();
-        report.subdomains = report::subdomains(&target.host, &certified, &unresolved, &guessed, &linked);
+        report.subdomains =
+            report::subdomains(&target.host, &certified, &unresolved, &guessed, &linked);
     }
     progress.set_phase(Phase::Done);
     Ok(ScanOutput {
@@ -376,7 +385,14 @@ async fn scan_range(opts: &ScanOptions, progress: &Progress, ips: &[IpAddr]) -> 
     let ports = scanner::ports::catalog();
     progress.start_ports(&opts.target, ips.len() * ports.len());
     let on_probe = |_: IpAddr, port: u16, _: scan::PortState| progress.port_done(port, false);
-    let hosts = scan::sweep(ips, &ports, opts.concurrency, opts.connect_timeout, &on_probe).await;
+    let hosts = scan::sweep(
+        ips,
+        &ports,
+        opts.concurrency,
+        opts.connect_timeout,
+        &on_probe,
+    )
+    .await;
     let target = opts.target.trim_start_matches('@').trim();
     let report = report::assemble_range(target, &hosts);
     progress.set_phase(Phase::Done);

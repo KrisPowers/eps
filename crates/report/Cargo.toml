@@ -1,6 +1,6 @@
 [package]
 name = "report"
-description = "Severity model and text/JSON rendering of portscan scan results."
+description = "Severity model and text/JSON rendering of EPS scan results."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,5 +1,5 @@
 {
-  "name": "portscan-ui",
+  "name": "ui",
   "private": true,
   "type": "module",
   "scripts": {
