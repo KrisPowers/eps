@@ -1,5 +1,1 @@
 blank_issues_enabled: false
-contact_links:
-  - name: Report a security problem
-    url: https://github.com/KrisPowers/portscan/security/advisories/new
-    about: Report vulnerabilities privately, not as an issue.
