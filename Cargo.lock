@@ -239,7 +239,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "endpoints"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -955,7 +955,7 @@ dependencies = [
 
 [[package]]
 name = "report"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "endpoints",
  "scanner",
@@ -1070,7 +1070,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "scanner"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "futures",
