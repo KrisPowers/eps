@@ -136,6 +136,20 @@ export interface Site {
   signals: Signal[];
   // Pages on other hosts the site links to, often its own subdomains.
   links?: string[];
+  // The requests its forms and its own code make.
+  requests?: SiteRequest[];
+}
+
+// A request a site makes: from a form, its own code, or PHP source it serves.
+export interface SiteRequest {
+  // GET, POST, ..., WS for a WebSocket, or for PHP's parameters ANY, COOKIE or FILE.
+  method: string;
+  // A path on the site, or a full address elsewhere.
+  url: string;
+  // The parameters it sends, where known.
+  params?: string[];
+  page: string;
+  script?: string;
 }
 
 export interface SitePage {

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { ApiDetail, Apis, Badge, BoneRows, Client, ClientDetail, Dns, FindingFold, History, live, Sitemap, Software, SoftwareDetail, Subdomains, Tabs } from "./Pages";
+import { ApiDetail, Apis, Badge, BoneRows, Client, ClientDetail, Dns, Exposure, FindingFold, History, live, Sitemap, Software, SoftwareDetail, Subdomains, Tabs } from "./Pages";
 import { Fold, usePaged } from "./paged";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
@@ -89,7 +89,8 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
         : page === "dns" ? <Dns host={host} live={found} />
         : page === "subdomains" ? <Subdomains live={found} />
         : page === "sitemap" ? <Sitemap live={found} host={host} />
-        : page === "client" ? (item ? <ClientDetail id={scan.id} live={found} category={item} /> : <Client id={scan.id} live={found} />)
+        : page === "client" ? (item ? <ClientDetail id={scan.id} live={found} category={item} page="client" /> : <Client id={scan.id} live={found} />)
+        : page === "exposure" ? (item ? <ClientDetail id={scan.id} live={found} category={item} page="exposure" /> : <Exposure id={scan.id} live={found} />)
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -210,7 +211,8 @@ function ScanNav({ scan, page }: { scan: ScanRow; page: Page }) {
     ? [["findings", "Hosts", "devices"], ["history", "History", "history"]]
     : [
       ["findings", "Findings", "shield"], ["software", "Software", "dns"], ["api", "API", "lock"], ["dns", "DNS", "language"],
-      ["subdomains", "Subdomains", "hub"], ["sitemap", "Sitemap", "lan"], ["client", "Client-side", "devices"], ["history", "History", "history"],
+      ["subdomains", "Subdomains", "hub"], ["sitemap", "Sitemap", "lan"], ["client", "Client-side", "devices"], ["exposure", "Exposure", "warning"],
+      ["history", "History", "history"],
     ];
   return (
     <nav className="scan-nav" aria-label="Scan pages">
