@@ -702,62 +702,93 @@ a.tile-card:hover { background: var(--card-2); transform: translateY(-2px); }
 }
 .toast .icon { color: light-dark(#f28b82, #d93025); }
 
-/* ---- Code: the site's files as an editor shows them ---- */
-/* The explorer on the left, the open file on the right with what was found
-   marked in it and a note under each. */
+/* ---- Code: the site's files in an editor ---- */
+/* The explorer on the left; the open file on the right, every line of it,
+   with a minimap down its edge and the picked concern docked underneath. */
 .ide {
-  display: grid; grid-template-columns: 280px minmax(0, 1fr); height: min(78vh, 920px);
+  display: grid; grid-template-columns: 260px minmax(0, 1fr); height: min(82vh, 1000px);
   border-radius: var(--card-round); background: var(--card); overflow: hidden; animation: rise .3s var(--ease) both;
 }
-.ide-tree { overflow: auto; padding: 8px 0; border-right: 1px solid var(--line); }
-.ide-row { display: flex; align-items: center; gap: 6px; height: 30px; padding-right: 12px; color: var(--text-2); font-size: 13px; white-space: nowrap; }
-a.ide-row:hover { background: var(--hover); }
+.ide-tree { overflow: auto; padding: 4px 0 12px; border-right: 1px solid var(--line); }
+.ide-tree-title { padding: 10px 16px 6px; color: var(--text-3); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.ide-tree-note { padding: 8px 16px; color: var(--text-3); font-size: 13px; }
+.ide-tree-rule { height: 1px; margin: 8px 12px; background: var(--line); }
+.ide-row {
+  display: flex; align-items: center; gap: 4px; width: 100%; height: 26px; padding-right: 12px; border: 0; background: none;
+  color: var(--text-2); font: 13px var(--font); text-align: left; white-space: nowrap; cursor: pointer;
+}
+.ide-row:hover { background: var(--hover); }
 .ide-row.on { background: var(--accent-bg); color: var(--on-accent-bg); }
-.ide-row.folder { color: var(--text-3); }
-.ide-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ide-caret { color: var(--text-3); transition: transform .15s var(--ease); }
+.ide-caret.open { transform: rotate(90deg); }
+.ide-caret-space { width: 16px; flex-shrink: 0; }
+.ide-row-name { flex: 1; min-width: 0; margin-left: 2px; overflow: hidden; text-overflow: ellipsis; }
 .ide-count { min-width: 20px; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--card-2); font: 500 11px/18px var(--font); text-align: center; }
 .ide-count.bad { background: var(--bad); color: var(--on-bad); }
 .ide-count.warn { background: var(--warn); color: var(--on-warn); }
 .ide-count.plain { background: var(--accent-bg); color: var(--on-accent-bg); }
 .ide-count.ok { background: var(--ok-bg); color: var(--ok); }
-.ide-tree-rule { height: 1px; margin: 8px 12px; background: var(--line); }
 .ide-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--raised); }
-.ide-main > .table-wrap { flex: 1; overflow: auto; }
-.ide-head { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.ide-kind { padding: 2px 8px; border-radius: 4px; background: var(--card-2); color: var(--text-2); font: 500 12px var(--font); white-space: nowrap; }
-.ide-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
-.ide-problems { display: grid; max-height: 30%; overflow: auto; padding: 4px 0; border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.ide-problem { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 4px 16px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-.ide-problem:hover { background: var(--hover); }
-.ide-problem-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ide-code { flex: 1; overflow: auto; padding: 8px 0 24px; font: 13px/20px var(--mono); }
-.ide-line { display: grid; grid-template-columns: 56px minmax(0, 1fr); }
-.ide-line.flagged { background: var(--hover); }
-.ide-num { padding-right: 16px; color: var(--text-3); text-align: right; user-select: none; }
-.ide-text { padding-right: 16px; font: inherit; white-space: pre-wrap; word-break: break-all; tab-size: 2; color: var(--text); }
-.ide-cut, .ide-gap { color: var(--text-3); }
-.ide-gap { padding-left: 56px; }
-.ide-anchor { scroll-margin: 96px; }
-/* What caused a concern, in its severity's colour. */
-.ide-hit { border-radius: 2px; text-decoration: underline wavy; text-underline-offset: 3px; text-decoration-skip-ink: none; }
-.ide-hit.bad { background: var(--bad-bg); text-decoration-color: var(--bad); }
-.ide-hit.warn { background: var(--warn-bg); text-decoration-color: var(--warn); }
-.ide-hit.plain { background: color-mix(in srgb, var(--accent) 14%, transparent); text-decoration-color: var(--accent); }
-.ide-hit.ok { background: color-mix(in srgb, var(--accent) 8%, transparent); text-decoration: underline dotted var(--accent); }
-.ide-note {
-  display: grid; gap: 8px; margin: 6px 16px 10px 56px; padding: 12px 16px; border-left: 3px solid var(--hue, var(--accent));
-  border-radius: 0 var(--round) var(--round) 0; background: var(--card); color: var(--text); font: 14px/1.5 var(--font);
+.ide-tabbar { display: flex; align-items: center; gap: 12px; min-width: 0; height: 40px; padding-right: 12px; border-bottom: 1px solid var(--line); background: var(--card); flex-shrink: 0; }
+.ide-tab {
+  display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 14px; border-right: 1px solid var(--line);
+  background: var(--raised); box-shadow: inset 0 2px 0 var(--accent); color: var(--text); font-size: 13px; white-space: nowrap;
 }
-.ide-note.bad { --hue: var(--bad); }
-.ide-note.warn { --hue: var(--warn); }
-.ide-note.ok { --hue: var(--ok); }
-.ide-note-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.ide-note p { color: var(--text-2); }
-.ide-impact b { display: block; color: var(--text); font-size: 12px; }
+.ide-crumbs { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: 12px; }
+.ide-kind { padding: 2px 8px; border-radius: 4px; background: var(--card-2); color: var(--text-2); font: 500 12px var(--font); white-space: nowrap; }
+.ide-editor { display: grid; grid-template-columns: minmax(0, 1fr) 72px; flex: 1; min-height: 0; }
+.ide-scroll { position: relative; overflow: auto; font: 13px/20px var(--mono); outline: none; }
+.ide-canvas { position: relative; min-width: 100%; }
+/* One line: its number, kept in view while the code scrolls across, then the code. */
+.ide-line { position: absolute; left: 0; right: 0; display: flex; height: 20px; white-space: pre; }
+.ide-line.hit { --hue: var(--accent); background: color-mix(in srgb, var(--hue) 6%, transparent); }
+.ide-line.hit.bad { --hue: var(--bad); }
+.ide-line.hit.warn { --hue: var(--warn); }
+.ide-line.current { background: color-mix(in srgb, var(--hue, var(--accent)) 14%, transparent); }
+.ide-num {
+  position: sticky; left: 0; z-index: 1; display: flex; flex: 0 0 72px; align-items: center; justify-content: flex-end; gap: 8px;
+  padding-right: 14px; background: var(--raised); color: var(--text-3); user-select: none;
+}
+.ide-line.current .ide-num { color: var(--text); }
+.ide-line.gap .ide-num { justify-content: center; }
+.ide-dot { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--accent); cursor: pointer; }
+.ide-dot.bad { background: var(--bad); }
+.ide-dot.warn { background: var(--warn); }
+.ide-text { padding-left: 8px; color: var(--text); font: inherit; white-space: pre; tab-size: 2; }
+.ide-cut { color: var(--text-3); }
+/* What caused a concern: underlined in its severity's colour, stronger when it's the one open. */
+.ide-hit {
+  --hue: var(--accent); border-radius: 2px; background: color-mix(in srgb, var(--hue) 16%, transparent); cursor: pointer;
+  text-decoration: underline wavy var(--hue); text-underline-offset: 3px; text-decoration-skip-ink: none;
+}
+.ide-hit.bad { --hue: var(--bad); }
+.ide-hit.warn { --hue: var(--warn); }
+.ide-hit.ok { text-decoration-style: dotted; }
+.ide-hit.on { background: color-mix(in srgb, var(--hue) 32%, transparent); }
+.ide-hit.focus { outline: 1px solid var(--hue); }
+.ide-minimap { position: relative; overflow: hidden; border-left: 1px solid var(--line); background: var(--raised); cursor: pointer; touch-action: none; }
+.ide-minimap canvas { display: block; }
+.ide-peek { --hue: var(--accent); flex-shrink: 0; max-height: 42%; overflow: auto; border-top: 1px solid var(--line); background: var(--card); box-shadow: inset 3px 0 0 var(--hue); }
+.ide-peek.bad { --hue: var(--bad); }
+.ide-peek.warn { --hue: var(--warn); }
+.ide-peek-bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 4px 8px 4px 16px; border-bottom: 1px solid var(--line); background: var(--card); }
+.ide-peek-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.ide-peek-nav { display: flex; align-items: center; gap: 2px; margin-left: auto; font-size: 12px; white-space: nowrap; }
+.ide-detail { display: grid; gap: 10px; padding: 12px 16px 16px; font-size: 14px; line-height: 1.5; }
+.ide-detail > p { color: var(--text-2); }
+.ide-impact { padding: 8px 12px; border-radius: var(--round); background: color-mix(in srgb, var(--hue, var(--accent)) 10%, transparent); }
+.ide-impact b { display: block; color: var(--text); font-size: 12px; font-weight: 500; }
+.ide-impact p { color: var(--text-2); }
 .ide-issues { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.ide-issues li { display: grid; gap: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ide-issues li { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--round); background: var(--raised); }
+.ide-issues li.on { box-shadow: inset 0 0 0 1px var(--hue); }
+.ide-issue { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.ide-issue:disabled { cursor: default; }
+.ide-issue .mono { margin-left: auto; font-size: 12px; }
 .ide-where { font-size: 12px; }
-/* Syntax: comments, strings, keywords, numbers, tags, attributes and variables. */
+.ide-list { flex: 1; overflow: auto; }
+.ide-list > .ide-peek { max-height: none; border-top: 0; border-bottom: 1px solid var(--line); }
+/* Syntax: comments, strings, keywords, numbers, tags, and attributes or variables. */
 .tk1 { color: var(--text-3); font-style: italic; }
 .tk2 { color: light-dark(#188038, #81c995); }
 .tk3 { color: light-dark(#9334e6, #d7aefb); }
@@ -793,11 +824,9 @@ a.ide-row:hover { background: var(--hover); }
   .result.scan-row { grid-template-columns: 16px minmax(0, 1fr) 24px; }
   .result.scan-row .result-what { grid-column: 2; }
   .ide { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .ide-tree { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--line); }
-  .ide-code { max-height: 70vh; }
-  .ide-line { grid-template-columns: 40px minmax(0, 1fr); }
-  .ide-num { padding-right: 10px; }
-  .ide-note { margin-left: 12px; }
+  .ide-tree { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .ide-main { height: 75vh; }
+  .ide-editor { grid-template-columns: minmax(0, 1fr) 40px; }
 }
 /* Compact density, picked in Settings. */
 :root[data-density="compact"] .result { min-height: 44px; }
