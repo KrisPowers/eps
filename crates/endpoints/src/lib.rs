@@ -22,10 +22,12 @@ use futures::stream::{self, StreamExt};
 use reqwest::{redirect::Policy, Client, StatusCode};
 
 pub mod api;
+pub mod code;
 pub mod names;
 pub mod paths;
 pub mod site;
 pub mod tls;
+pub mod wordpress;
 
 /// The most of a response body any check reads. A service can answer with
 /// an endless or decompression-bomb body; the scan keeps only this much.
@@ -580,6 +582,7 @@ pub async fn inspect_service(
         &client,
         &format!("{scheme}://{}", authority(host, port)),
         &cfg.start,
+        soft404,
     )
     .await;
 
