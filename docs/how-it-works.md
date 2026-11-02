@@ -40,9 +40,23 @@ what to do about it.
   fetched and read, never run, for code that asks for location or looks up the
   visitor's IP, can reveal a local IP over WebRTC, fingerprints the device,
   reaches for the camera, microphone, sensors or clipboard, watches keystrokes,
-  mines cryptocurrency or hides itself; and for hidden frames, password forms
-  posting elsewhere, redirects, trackers and session recorders. Code that only
+  mines cryptocurrency or hides itself; and for hidden frames, redirects,
+  trackers and session recorders. Code that only
   builds such calls as it runs can slip past it.
+- **Exposure:** what the site itself gives away. Its forms: file uploads (any
+  type, or limited only in the browser), passwords filled in, sent in the
+  address, over plain HTTP or to another site, credentials in hidden fields, and posts with no
+  anti-forgery token. Credentials left in its markup, its own scripts and the
+  original source in any source maps it serves (cloud, payment and repository
+  keys, private keys, passwords in addresses and in code), shown masked. Every
+  request its forms and code make (`fetch`, `XMLHttpRequest`, `axios`, jQuery,
+  WebSockets) with its method, flagging admin endpoints, plain HTTP and
+  development addresses left in. PHP served as source, from `.php` pages and
+  the `.bak`, `~`, `.old`, `.orig` and `.save` copies beside them, read for
+  credentials and the parameters it takes. Paths `robots.txt` names that open
+  to anyone or point to a login. On WordPress: listed users, XML-RPC, the
+  login page, its version, a public debug log, a listable uploads folder,
+  setup left open and copies of `wp-config.php`. Every check is a `GET`.
 - **DNS:** the target's records (A, AAAA, CNAME, MX, NS, TXT, CAA, DMARC and the
   reverse name), asked of the system resolver, with SPF and DMARC checked for a
   domain that takes mail.
