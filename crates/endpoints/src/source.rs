@@ -1,6 +1,7 @@
-//! A file the scan read, re-printed for the report: whole when it's short,
-//! else the lines around each thing found in it, and on a very long line
-//! (minified code) a window of it, with where each thing is.
+//! A file the scan read, re-printed for the report: whole, as an editor
+//! shows it, and only when a site's files run past what a report can carry,
+//! the lines around each thing found in it (on a very long, minified line, a
+//! window of it), with where each thing is.
 
 use serde::Serialize;
 
@@ -38,9 +39,7 @@ pub struct Mark {
     pub len: usize,
 }
 
-/// Shown whole up to this size, line count and line length.
-const WHOLE_BYTES: usize = 64 * 1024;
-const WHOLE_LINES: usize = 1500;
+/// A line longer than this is windowed when a file is cut down.
 const LONG_LINE: usize = 400;
 /// Lines shown before and after each thing found.
 const AROUND: usize = 4;
@@ -68,21 +67,22 @@ fn ceil(text: &str, mut i: usize) -> usize {
 }
 
 /// The parts of `text` to show for things at byte ranges `spans`, and each
-/// one's mark, in order; `None` for a span outside the text.
-pub fn show(text: &str, spans: &[(usize, usize)]) -> (Vec<Section>, Vec<Option<Mark>>) {
+/// one's mark, in order; `None` for a span outside the text. With `whole`,
+/// all of it.
+pub fn show(
+    text: &str,
+    spans: &[(usize, usize)],
+    whole: bool,
+) -> (Vec<Section>, Vec<Option<Mark>>) {
     let starts: Vec<usize> = std::iter::once(0)
         .chain(text.match_indices('\n').map(|(i, _)| i + 1))
         .collect();
     let line_end = |l: usize| starts.get(l + 1).map_or(text.len(), |s| s - 1);
     let line_of = |b: usize| starts.partition_point(|s| *s <= b) - 1;
-    let longest = (0..starts.len())
-        .map(|l| line_end(l) - starts[l])
-        .max()
-        .unwrap_or(0);
 
     // Byte ranges to show, with the line and column each begins at.
     let mut windows: Vec<(usize, usize, usize, usize)> = Vec::new();
-    if text.len() <= WHOLE_BYTES && starts.len() <= WHOLE_LINES && longest <= LONG_LINE {
+    if whole {
         windows.push((0, text.len(), 1, 0));
     } else {
         for &(s, e) in spans {
@@ -143,10 +143,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shows_short_files_whole() {
+    fn shows_files_whole() {
         let text = "<html>\n<form action=\"/x\">\n</html>";
         let at = text.find("<form").unwrap();
-        let (sections, marks) = show(text, &[(at, at + 5)]);
+        let (sections, marks) = show(text, &[(at, at + 5)], true);
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].line, 1);
         assert_eq!(
@@ -160,12 +160,12 @@ mod tests {
     }
 
     #[test]
-    fn shows_lines_around_in_long_files() {
+    fn cut_down_shows_the_lines_around() {
         let text = (1..=3000)
             .map(|n| format!("line {n}\n"))
             .collect::<String>();
         let at = text.find("line 2000\n").unwrap();
-        let (sections, marks) = show(&text, &[(at, at + 9)]);
+        let (sections, marks) = show(&text, &[(at, at + 9)], false);
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].line, 1996);
         assert!(sections[0].text.starts_with("line 1996\n"));
@@ -174,10 +174,10 @@ mod tests {
     }
 
     #[test]
-    fn shows_a_window_of_minified_code() {
+    fn cut_down_shows_a_window_of_minified_code() {
         let text = format!("{}fetch(\"/api\"){}", "a;".repeat(5000), "b;".repeat(5000));
         let at = text.find("fetch").unwrap();
-        let (sections, marks) = show(&text, &[(at, at + 5)]);
+        let (sections, marks) = show(&text, &[(at, at + 5)], false);
         assert_eq!(sections[0].line, 1);
         assert!(sections[0].col > 0);
         let m = marks[0].unwrap();

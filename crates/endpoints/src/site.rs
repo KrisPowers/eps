@@ -1948,8 +1948,14 @@ fn dedupe(signals: &mut Vec<Signal>) {
     });
 }
 
-/// Shows the part of each kept file its signals are in, and marks where.
+/// How much of a site's files a report carries whole; past it, a file is
+/// cut down to the lines around what was found in it.
+const WHOLE_BUDGET: usize = 16 * 1024 * 1024;
+
+/// Shows each kept file its signals are in, whole while the budget lasts,
+/// and marks where each is.
 fn place(site: &mut Site) {
+    let mut budget = WHOLE_BUDGET;
     for t in std::mem::take(&mut site.texts) {
         let mut refs = Vec::new();
         let mut spans = Vec::new();
@@ -1971,7 +1977,11 @@ fn place(site: &mut Site) {
         if refs.is_empty() {
             continue;
         }
-        let (sections, marks) = source::show(&t.text, &spans);
+        let whole = t.text.len() <= budget;
+        if whole {
+            budget -= t.text.len();
+        }
+        let (sections, marks) = source::show(&t.text, &spans, whole);
         for ((si, ii), mark) in refs.into_iter().zip(marks) {
             match ii {
                 None => site.signals[si].mark = mark,
