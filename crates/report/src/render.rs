@@ -521,16 +521,17 @@ fn site_section(paint: Paint, report: &Report, out: &mut String) {
         row.add(
             ACCENT,
             &format!(
-                "{} mapped  ·  {}, {third} from other sites",
+                "{} mapped  ·  {}, {third} from other sites  ·  {}",
                 plural(site.pages.len(), "path", "paths"),
-                plural(site.scripts.len(), "script", "scripts")
+                plural(site.scripts.len(), "script", "scripts"),
+                plural(site.requests.len(), "request", "requests")
             ),
         );
         row.finish(out);
         if site.signals.is_empty() {
             notice(
                 paint,
-                "Nothing found that reaches into a visitor's browser.",
+                "Nothing found that reaches into a visitor's browser or exposes the site.",
                 out,
             );
             continue;
@@ -555,6 +556,15 @@ fn site_section(paint: Paint, report: &Report, out: &mut String) {
             row.pad_to(55);
             row.add(ACCENT, &fit(&x.page, WIDTH - 55));
             row.finish(out);
+            for i in &x.issues {
+                let mut row = Row::new(paint);
+                row.pad_to(11);
+                row.add(
+                    "",
+                    &fit(&format!("{}  {}", i.severity, i.label), WIDTH - 11),
+                );
+                row.finish(out);
+            }
         }
     }
 }

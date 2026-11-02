@@ -35,14 +35,36 @@ what to do about it.
   `robots.txt` (disallowed paths included) and its sitemaps, its own links up to
   three deep, and the routes its scripts name, which a single-page app never
   links in its markup.
-- **Client-side:** what those pages would do in a visitor's browser, so a site
-  can be checked before anyone opens it. Each page and every script it loads is
-  fetched and read, never run, for code that asks for location or looks up the
-  visitor's IP, can reveal a local IP over WebRTC, fingerprints the device,
-  reaches for the camera, microphone, sensors or clipboard, watches keystrokes,
-  mines cryptocurrency or hides itself; and for hidden frames, password forms
-  posting elsewhere, redirects, trackers and session recorders. Code that only
-  builds such calls as it runs can slip past it.
+- **Code:** the site's code, read the way an editor shows it, so a site can be
+  checked before anyone opens it. Each page, every script it loads, the
+  original source in its source maps, PHP it serves as source, `robots.txt` and,
+  on WordPress, a few of its answers are fetched and read, never run. Every
+  file something was found in opens in full in an editor on the dashboard,
+  with a minimap and the code behind each concern underlined; a concern opens
+  to say what it is and what could happen as a result.
+  - Forms are one concern each, naming where the form submits and how, with
+    every problem it has: file uploads (any type, or limited only in the
+    browser), passwords filled in, sent in the address, over plain HTTP or to
+    another site, credentials in hidden fields, and posts with no anti-forgery
+    token.
+  - Credentials left in the markup and the site's own code (cloud, payment and
+    repository keys, private keys, passwords in addresses and in code), shown
+    masked, and every request the code makes (`fetch`, `XMLHttpRequest`,
+    `axios`, jQuery, WebSockets) with its method, flagging admin endpoints,
+    plain HTTP and development addresses left in.
+  - Source maps and PHP served as source, from `.php` pages and the `.bak`,
+    `~`, `.old`, `.orig` and `.save` copies beside them, read for credentials
+    and the parameters they take.
+  - Paths `robots.txt` names that open to anyone or point to a login, and on
+    WordPress: listed users, XML-RPC, the login page, its version, a public
+    debug log, a listable uploads folder, setup left open and copies of
+    `wp-config.php`.
+  - What the pages would do in a visitor's browser: asking for location or
+    looking up the visitor's IP, revealing a local IP over WebRTC,
+    fingerprinting, the camera, microphone, sensors or clipboard, watching
+    keystrokes, mining cryptocurrency, hidden code, hidden frames, redirects,
+    trackers and session recorders. Code that only builds such calls as it
+    runs can slip past it.
 - **DNS:** the target's records (A, AAAA, CNAME, MX, NS, TXT, CAA, DMARC and the
   reverse name), asked of the system resolver, with SPF and DMARC checked for a
   domain that takes mail.

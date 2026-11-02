@@ -14,8 +14,9 @@ cd ui && npm ci && npm run build    # type-check and build the dashboard
   (`banner`) and DNS (`dns`).
 - `crates/endpoints`: scheme detection, endpoint discovery, auth, TLS and
   rate-limit checks, the conventional endpoint catalog (`paths`), API documents
-  (`api`), the site crawl and client-side checks (`site`), and certificate-log
-  subdomains (`names`).
+  (`api`), the site crawl and the checks on its code (`site`), files re-printed
+  for the report (`source`), reading served code for credentials and requests
+  (`code`), WordPress (`wordpress`), and certificate-log subdomains (`names`).
 - `crates/report`: the severity model and text and JSON rendering.
 - `crates/cli`: the binary (built as `eps`, installed as `@`), and `--serve`,
   the dashboard's server and API (`serve.rs`).

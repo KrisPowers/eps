@@ -526,9 +526,9 @@ fn header_findings(svc: &ServiceReport) -> Vec<Finding> {
     out
 }
 
-/// What a site's pages would do in a visitor's browser that's worth flagging:
-/// its high and medium signals, located at the script or page that showed
-/// them. Low ones stay on the site's own page.
+/// What a site's code does or gives away that's worth flagging: its high
+/// and medium signals, located at the script or page that showed them, a
+/// form's problems together as one. Low ones stay on the site's own page.
 fn site_findings(port: u16, site: &Site) -> Vec<Finding> {
     site.signals
         .iter()
@@ -542,11 +542,18 @@ fn site_findings(port: u16, site: &Site) -> Vec<Finding> {
                 .script
                 .clone()
                 .unwrap_or_else(|| format!("{}{}", site.base, s.page));
+            let mut detail = format!("{} Seen on {}.", s.why, s.page);
+            for i in &s.issues {
+                detail.push_str(&format!(" {}: {} {}", i.label, i.why, i.impact));
+            }
+            if !s.impact.is_empty() {
+                detail.push_str(&format!(" What could happen: {}", s.impact));
+            }
             Some(Finding {
                 severity,
                 title: s.label.clone(),
                 location: format!("{at} (port {port})"),
-                detail: format!("{} Seen on {}.", s.why, s.page),
+                detail,
             })
         })
         .collect()

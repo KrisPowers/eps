@@ -6,7 +6,7 @@ import { logo } from "./logos";
 import { Fold, usePaged } from "./paged";
 import { href } from "./route";
 import { Card, fromProgress, fromReport, plural, SEVERITY, type Item, type Previous } from "./ScanView";
-import type { Api, DnsRecord, Finding, Host, Operation, Progress, Report, ScanRow, Severity, Signal, Site, Subdomain, Tech } from "./types";
+import type { Api, DnsRecord, Finding, Host, Operation, Progress, Report, ScanRow, Severity, Site, Subdomain, Tech } from "./types";
 
 // The pages of a scan beyond Findings: Software and API, each with a page per
 // thing on it, DNS, and History. Each draws what has been found so far while
@@ -81,7 +81,7 @@ function Back({ to, label, children }: { to: string; label: string; children: Re
 }
 
 // Bones are skeleton tiles standing in for what is still being found.
-function Bones({ n, label }: { n: number; label: string }) {
+export function Bones({ n, label }: { n: number; label: string }) {
   return (
     <>
       {Array.from({ length: n }, (_, i) => (
@@ -100,7 +100,7 @@ export function BoneRows({ n }: { n: number }) {
   return <div className="skeleton" aria-busy="true">{Array.from({ length: n }, (_, i) => <span key={i} className="bone" />)}</div>;
 }
 
-function Empty({ icon, title, children }: { icon: "dns" | "lock" | "language" | "history"; title: string; children: ReactNode }) {
+export function Empty({ icon, title, children }: { icon: "dns" | "lock" | "language" | "history"; title: string; children: ReactNode }) {
   return (
     <div className="card welcome">
       <Icon name={icon} size={36} />
@@ -111,7 +111,7 @@ function Empty({ icon, title, children }: { icon: "dns" | "lock" | "language" | 
 }
 
 // Still is the line under a page while more is coming.
-function Still({ live: l }: { live: Live }) {
+export function Still({ live: l }: { live: Live }) {
   if (!l.going) return null;
   return (
     <p className="still">
@@ -601,117 +601,6 @@ export function Sitemap({ live: l, host }: { live: Live; host: string }) {
         {pager}
       </div>
       <Still live={l} />
-    </>
-  );
-}
-
-// ---- client-side ----
-
-const SEVERITIES: Severity[] = ["high", "medium", "low"];
-const worst = (list: Signal[]) => SEVERITIES.find((s) => list.some((x) => x.severity === s));
-
-// Client is what the site's pages would do in a visitor's browser, read
-// inside the scanner so you never open them: one line of the verdict, then
-// a tile per kind of concern, and one for the scripts read; each opens.
-export function Client({ id, live: l }: { id: string; live: Live }) {
-  const signals = l.sites.flatMap((s) => s.signals);
-  const scripts = l.sites.flatMap((s) => s.scripts);
-  const pages = l.sites.reduce((n, s) => n + s.pages.length, 0);
-  const kinds = [...new Set(signals.map((s) => s.category))].sort((a, b) =>
-    SEVERITIES.indexOf(worst(signals.filter((s) => s.category === a))!) - SEVERITIES.indexOf(worst(signals.filter((s) => s.category === b))!));
-  if (!l.sites.length) {
-    return l.going ? <div className="tiles"><Bones n={4} label="Reading the site" /></div>
-      : <Empty icon="language" title="No website">No web service answered, so there were no pages to read.</Empty>;
-  }
-  const w = worst(signals);
-  return (
-    <>
-      <p className="summary-line">
-        {w ? <span className={"chip " + SEVERITY[w]}>{plural(signals.length, "concern")}</span> : <span className="chip ok">Nothing reaches into your browser</span>}
-        <span><b>{pages}</b> {pages === 1 ? "page" : "pages"} read</span>
-        <span><b>{scripts.length}</b> {scripts.length === 1 ? "script" : "scripts"}, {scripts.filter((s) => s.third_party).length} from other sites</span>
-      </p>
-      <div className="tiles">
-        {kinds.map((k) => {
-          const these = signals.filter((s) => s.category === k);
-          const sev = worst(these)!;
-          return (
-            <a key={k} className="tile-card" href={href(id, "client", k)}>
-              <span className={"badge sev " + SEVERITY[sev]} aria-hidden="true">{k.slice(0, 1)}</span>
-              <span className="tile-title">{k}</span>
-              <span className="tile-sub">{these[0].label}{these.length > 1 && `, and ${these.length - 1} more`}</span>
-              <span className="tile-foot">
-                <span className={"chip " + SEVERITY[sev]}>{sev}</span>
-                <span>{plural(new Set(these.map((s) => s.page)).size, "page")}</span>
-              </span>
-            </a>
-          );
-        })}
-        {scripts.length > 0 && (
-          <a className="tile-card" href={href(id, "client", "Scripts")}>
-            <span className="badge sev plain" aria-hidden="true">S</span>
-            <span className="tile-title">Scripts</span>
-            <span className="tile-sub">Every script the pages load</span>
-            <span className="tile-foot">
-              <span>{plural(scripts.length, "script")}</span>
-              <span>{scripts.filter((s) => s.third_party).length} from other sites</span>
-            </span>
-          </a>
-        )}
-        {l.going && <Bones n={1} label="Reading more pages" />}
-      </div>
-      <Still live={l} />
-    </>
-  );
-}
-
-// ClientDetail is one kind of concern, each a line naming the page until
-// opened for what it means, the code that showed it and the script it's
-// in; or the scripts the pages load.
-export function ClientDetail({ id, live: l, category }: { id: string; live: Live; category: string }) {
-  const signals = l.sites.flatMap((s) => s.signals).filter((s) => s.category === category);
-  const scripts = l.sites.flatMap((s) => s.scripts);
-  const list = usePaged(signals, 10);
-  const js = usePaged(scripts, 15);
-  const kb = (n: number) => (n ? (n < 1024 ? `${n} B` : `${Math.round(n / 1024)} KB`) : "Not read");
-  return (
-    <>
-      <Back to={href(id, "client")} label="Client-side">
-        <h2>{category}</h2>
-        <div className="page-sub">{category === "Scripts" ? plural(scripts.length, "script") : plural(signals.length, "concern")}</div>
-      </Back>
-      {category === "Scripts" ? (
-        <div className="card">
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th className="grow">Script</th><th>From</th><th>Size</th></tr></thead>
-              <tbody>
-                {js.shown.map((s) => (
-                  <tr key={s.url}>
-                    <td className="mono wrap">{s.url}</td>
-                    <td className="muted">{s.third_party ? "Another site" : "This site"}</td>
-                    <td className="muted">{kb(s.bytes)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {js.pager}
-        </div>
-      ) : signals.length ? (
-        <div className="card folds">
-          {list.shown.map((s, k) => (
-            <Fold key={k} head={<><span className={"chip " + SEVERITY[s.severity]}>{s.severity}</span><span className="fold-title">{s.label}</span><span className="muted mono fold-note-inline">{s.page}</span></>}>
-              <p>{s.why}</p>
-              <code className="command-line evidence">{s.evidence}</code>
-              <span className="muted">{s.script ? <>In <span className="mono">{s.script}</span></> : "In the page itself"}</span>
-            </Fold>
-          ))}
-          {list.pager}
-        </div>
-      ) : (
-        <div className="card empty">Nothing of this kind</div>
-      )}
     </>
   );
 }

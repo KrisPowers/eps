@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { ApiDetail, Apis, Badge, BoneRows, Client, ClientDetail, Dns, FindingFold, History, live, Sitemap, Software, SoftwareDetail, Subdomains, Tabs } from "./Pages";
+import { ApiDetail, Apis, Badge, BoneRows, Dns, FindingFold, History, live, Sitemap, Software, SoftwareDetail, Subdomains, Tabs } from "./Pages";
+import { Code } from "./Code";
 import { Fold, usePaged } from "./paged";
 import { useDismiss } from "./dismiss";
 import { download, FORMATS } from "./export";
@@ -53,7 +54,8 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
   const more = (report?.addresses?.length ?? 0) - 1;
   // A port or one item open: its own heading takes the bar's place, so back
   // goes to the page it came from, and from there to every scan.
-  const deep = !!open || !!item;
+  // A file picked on Code stays inside its page, explorer and all.
+  const deep = !!open || (!!item && page !== "code");
   return (
     <>
       <div className="page-head">
@@ -81,7 +83,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
         <div className="callout bad"><Icon name="error" /><span>{scan.error ?? "The scan failed."}</span></div>
       )}
       {/* The heading and bar above stay put; only what's under them changes from page to page. */}
-      <div className={"page-body" + (deep ? " deep" : "")} key={page + "/" + (port ?? "") + "/" + (item ?? "")}>
+      <div className={"page-body" + (deep ? " deep" : "")} key={page + "/" + (port ?? "") + "/" + (page === "code" ? "" : item ?? "")}>
       {open && items ? <Detail id={scan.id} item={open} items={sorted(items)} />
         : page === "history" ? <History scan={scan} live={found} history={history} previous={previous} />
         : page === "software" ? (item ? <SoftwareDetail id={scan.id} live={found} name={item} /> : <Software id={scan.id} live={found} />)
@@ -89,7 +91,7 @@ export function ScanView({ scan, report, items, progress: p, page, port, item, p
         : page === "dns" ? <Dns host={host} live={found} />
         : page === "subdomains" ? <Subdomains live={found} />
         : page === "sitemap" ? <Sitemap live={found} host={host} />
-        : page === "client" ? (item ? <ClientDetail id={scan.id} live={found} category={item} /> : <Client id={scan.id} live={found} />)
+        : page === "code" ? <Code id={scan.id} live={found} item={item} />
         : range && report ? <Hosts report={report} onScan={onScan} />
         : !range && items ? <Results id={scan.id} items={items} />
         : going ? <Stage scan={scan} progress={p} /> : scan.status === "done" ? <Loading /> : null}
@@ -210,7 +212,8 @@ function ScanNav({ scan, page }: { scan: ScanRow; page: Page }) {
     ? [["findings", "Hosts", "devices"], ["history", "History", "history"]]
     : [
       ["findings", "Findings", "shield"], ["software", "Software", "dns"], ["api", "API", "lock"], ["dns", "DNS", "language"],
-      ["subdomains", "Subdomains", "hub"], ["sitemap", "Sitemap", "lan"], ["client", "Client-side", "devices"], ["history", "History", "history"],
+      ["subdomains", "Subdomains", "hub"], ["sitemap", "Sitemap", "lan"], ["code", "Code", "code"],
+      ["history", "History", "history"],
     ];
   return (
     <nav className="scan-nav" aria-label="Scan pages">

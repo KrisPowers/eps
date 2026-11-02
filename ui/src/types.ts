@@ -136,6 +136,22 @@ export interface Site {
   signals: Signal[];
   // Pages on other hosts the site links to, often its own subdomains.
   links?: string[];
+  // The requests its forms and its own code make.
+  requests?: SiteRequest[];
+  // The files its signals are in.
+  files?: SourceFile[];
+}
+
+// A request a site makes: from a form, its own code, or PHP source it serves.
+export interface SiteRequest {
+  // GET, POST, ..., WS for a WebSocket, or for PHP's parameters ANY, COOKIE or FILE.
+  method: string;
+  // A path on the site, or a full address elsewhere.
+  url: string;
+  // The parameters it sends, where known.
+  params?: string[];
+  page: string;
+  script?: string;
 }
 
 export interface SitePage {
@@ -157,12 +173,55 @@ export interface Script {
 export interface Signal {
   category: string;
   label: string;
-  severity: "high" | "medium" | "low";
-  // What it means for someone who opens the page.
+  // info is a form with nothing wrong, listed for where it submits.
+  severity: Severity;
+  // What it is.
   why: string;
+  // What could happen because of it; empty for a form, whose issues say.
+  impact: string;
   evidence: string;
   page: string;
   script?: string;
+  // The file it's in: the url of one of the site's files.
+  file?: string;
+  // Where in that file's shown text.
+  mark?: Mark;
+  // For one thing with several problems, such as a form, each of them.
+  issues?: Issue[];
+}
+
+export interface Issue {
+  label: string;
+  severity: Severity;
+  why: string;
+  impact: string;
+  mark?: Mark;
+}
+
+// Where something is in a file: in section `section`, `at` characters in,
+// for `len` characters.
+export interface Mark {
+  section: number;
+  at: number;
+  len: number;
+}
+
+// A file the scan read, as much of it as is shown: whole when short, else
+// the lines around what was found in it.
+export interface SourceFile {
+  url: string;
+  // Its path in the file explorer: /js/app.js, or host first for another site's.
+  name: string;
+  // html, js, css, php, json, xml, http or text.
+  kind: string;
+  sections: Section[];
+}
+
+// A run of a file from `line` (from 1), `col` characters into that line.
+export interface Section {
+  line: number;
+  col: number;
+  text: string;
 }
 
 export interface DnsRecord {
