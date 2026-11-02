@@ -5,7 +5,7 @@
 use futures::future::join_all;
 use reqwest::{Client, Url};
 
-use crate::site::Signal;
+use crate::site::{Says, Signal};
 
 /// Each path asked, in the order [`check`] reads the answers.
 const PATHS: [&str; 8] = [
@@ -21,6 +21,8 @@ const PATHS: [&str; 8] = [
 
 /// The most of any one answer read.
 const BIGGEST: usize = 512 * 1024;
+/// The most of an answer kept to show.
+const SHOWN: usize = 64 * 1024;
 
 /// A path's status, `Location` and body.
 async fn fetch(client: &Client, root: &Url, path: &str) -> Option<(u16, String, String)> {
@@ -40,22 +42,44 @@ async fn fetch(client: &Client, root: &Url, path: &str) -> Option<(u16, String, 
     ))
 }
 
-fn signal(
+/// A concern, with the answer it was read from: the signal (its span in
+/// that answer), the path asked, the answer, and the answer's language.
+pub type Found = (Signal, String, String, &'static str);
+
+/// A concern at `needle` in the answer to `path`.
+fn found(
     label: &str,
     severity: &'static str,
-    why: &'static str,
+    says: Says,
     evidence: String,
-    page: &str,
-) -> Signal {
-    Signal {
+    path: &str,
+    text: &str,
+    needle: &str,
+) -> Found {
+    let mut end = text.len().min(SHOWN);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    let shown = &text[..end];
+    let span = shown.find(needle).map(|i| (i, i + needle.len()));
+    let kind = match path {
+        "/wp-json/wp/v2/users" => "json",
+        "/xmlrpc.php" | "/feed/" => "xml",
+        p if p.ends_with(".log") => "text",
+        _ => "html",
+    };
+    let signal = Signal {
         category: "WordPress",
         label: label.to_string(),
         severity,
-        why,
+        why: says.why,
+        impact: says.impact,
         evidence,
-        page: page.to_string(),
-        script: None,
-    }
+        page: path.to_string(),
+        span,
+        ..Signal::default()
+    };
+    (signal, path.to_string(), shown.to_string(), kind)
 }
 
 /// The user names a `/wp-json/wp/v2/users` answer lists.
@@ -79,8 +103,41 @@ fn version(feed: &str) -> Option<&str> {
     (len > 0).then(|| &feed[at..at + len])
 }
 
+const USERS: Says = Says {
+    why: "The REST API names every author's login. Hide the users endpoint from visitors who aren't signed in.",
+    impact: "A ready-made list of user names for password guessing against wp-login.php and xmlrpc.php: an attacker now only has to guess the password.",
+};
+const AUTHORS: Says = Says {
+    why: "Asking for an author by number redirects to their page, which carries their login name. Counting up lists every user.",
+    impact: USERS.impact,
+};
+const XMLRPC: Says = Says {
+    why: "xmlrpc.php is on. Turn it off unless something uses it.",
+    impact: "One request to it can try hundreds of passwords, getting around login rate limits, and its pingbacks can make your server send requests to other sites for an attacker.",
+};
+const LOGIN: Says = Says {
+    why: "The login page is at the address every WordPress site uses.",
+    impact: "Bots guess passwords against it around the clock; a weak or reused admin password falls quickly. Limit attempts and add two-factor sign-in, or restrict who can reach it.",
+};
+const VERSION: Says = Says {
+    why: "The feed says exactly which WordPress runs here. Keep it up to date.",
+    impact: "Anyone can match the version against published vulnerabilities and pick the ones that work on it.",
+};
+const DEBUG_LOG: Says = Says {
+    why: "Anyone can read the PHP error log. Turn off WP_DEBUG_LOG on the live site and delete the file.",
+    impact: "File paths, database errors, plugin names and sometimes visitors' emails and form data are readable, a map of the server for an attacker.",
+};
+const UPLOADS: Says = Says {
+    why: "The uploads folder lists its contents. Turn off directory listing.",
+    impact: "Every file ever uploaded, private documents never linked from the site included, can be found and downloaded.",
+};
+const SETUP: Says = Says {
+    why: "WordPress isn't configured yet and its setup page is public.",
+    impact: "Whoever finishes setup first points the site at their own database, makes themselves admin, and can then run code on the server.",
+};
+
 /// Checks the WordPress site at `root`.
-pub async fn check(client: &Client, root: &Url) -> Vec<Signal> {
+pub async fn check(client: &Client, root: &Url) -> Vec<Found> {
     let got = join_all(PATHS.iter().map(|p| fetch(client, root, p))).await;
     let mut out = Vec::new();
     let answer = |i: usize| {
@@ -91,57 +148,75 @@ pub async fn check(client: &Client, root: &Url) -> Vec<Signal> {
 
     if let Some((200, _, body)) = answer(0) {
         let names = users(body);
-        if !names.is_empty() {
-            out.push(signal(
+        if let Some(first) = names.first() {
+            out.push(found(
                 "Lists its users",
                 "medium",
-                "The REST API names every author's login, so anyone guessing passwords only has to guess the password. Hide the users endpoint from visitors who aren't signed in.",
-                names.iter().take(10).cloned().collect::<Vec<_>>().join(", "),
+                USERS,
+                names
+                    .iter()
+                    .take(10)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 PATHS[0],
+                body,
+                &format!("\"slug\":\"{first}\""),
             ));
         }
     }
     if let Some((s, location, _)) = answer(1) {
         if (300..400).contains(&s) && location.contains("/author/") {
-            out.push(signal(
+            let text = format!("HTTP {s}\nLocation: {location}\n");
+            let (signal, path, text, _) = found(
                 "Names its users by number",
                 "low",
-                "Asking for an author by number redirects to their page, which carries their login name. Counting up lists every user.",
+                AUTHORS,
                 format!("{} to {location}", PATHS[1]),
                 PATHS[1],
-            ));
+                &text,
+                location,
+            );
+            out.push((signal, path, text, "http"));
         }
     }
     if let Some((s, _, body)) = answer(2) {
-        if (s == 405 || s == 200) && body.contains("XML-RPC server accepts POST requests only") {
-            out.push(signal(
+        let said = "XML-RPC server accepts POST requests only";
+        if (s == 405 || s == 200) && body.contains(said) {
+            out.push(found(
                 "XML-RPC is on",
                 "medium",
-                "xmlrpc.php lets one request try hundreds of passwords, and can make this site send requests to others. Turn it off unless something uses it.",
-                "XML-RPC server accepts POST requests only.".to_string(),
+                XMLRPC,
+                format!("{said}."),
                 PATHS[2],
+                body,
+                said,
             ));
         }
     }
     if let Some((200, _, body)) = answer(3) {
         if body.contains("user_login") {
-            out.push(signal(
+            out.push(found(
                 "Login page at the default address",
                 "low",
-                "Automated password guessing goes straight to wp-login.php. Limit attempts and add two-factor sign-in, or restrict who can reach it.",
+                LOGIN,
                 format!("{}{}", root.as_str().trim_end_matches('/'), PATHS[3]),
                 PATHS[3],
+                body,
+                "user_login",
             ));
         }
     }
     if let Some((200, _, body)) = answer(4) {
         if let Some(v) = version(body) {
-            out.push(signal(
+            out.push(found(
                 "Names its WordPress version",
                 "low",
-                "The feed says exactly which WordPress runs here, so anyone can look up what it is vulnerable to. Keep it up to date.",
+                VERSION,
                 format!("WordPress {v}"),
                 PATHS[4],
+                body,
+                &format!("wordpress.org/?v={v}"),
             ));
         }
     }
@@ -162,34 +237,42 @@ pub async fn check(client: &Client, root: &Url) -> Vec<Signal> {
             while !body.is_char_boundary(end) {
                 end -= 1;
             }
-            out.push(signal(
+            let line = &body[at..end];
+            out.push(found(
                 "Debug log is public",
                 "high",
-                "Anyone can read the PHP error log: file paths, queries and sometimes visitors' data. Turn off WP_DEBUG_LOG on the live site and delete the file.",
-                body[at..end].to_string(),
+                DEBUG_LOG,
+                line.to_string(),
                 PATHS[5],
+                body,
+                line,
             ));
         }
     }
     if let Some((200, _, body)) = answer(6) {
         if body.contains("Index of") {
-            out.push(signal(
+            out.push(found(
                 "Lists its uploads folder",
                 "medium",
-                "Anyone can browse every file ever uploaded, including ones never linked from the site. Turn off directory listing.",
+                UPLOADS,
                 "Index of /wp-content/uploads".to_string(),
                 PATHS[6],
+                body,
+                "Index of",
             ));
         }
     }
     if let Some((200, _, body)) = answer(7) {
-        if body.contains("setup-config.php?step=1") && !body.contains("already exists") {
-            out.push(signal(
+        let step = "setup-config.php?step=1";
+        if body.contains(step) && !body.contains("already exists") {
+            out.push(found(
                 "Setup is open to anyone",
                 "high",
-                "WordPress isn't configured yet and its setup page is public: whoever finishes it first owns the site and can run code on the server.",
+                SETUP,
                 format!("{}{}", root.as_str().trim_end_matches('/'), PATHS[7]),
                 PATHS[7],
+                body,
+                step,
             ));
         }
     }
@@ -212,5 +295,22 @@ mod tests {
             Some("6.4.2")
         );
         assert_eq!(version("<generator>Hugo</generator>"), None);
+    }
+
+    #[test]
+    fn marks_what_it_found_in_the_answer() {
+        let body = r#"[{"id":1,"slug":"admin"}]"#;
+        let (signal, path, text, kind) = found(
+            "Lists its users",
+            "medium",
+            USERS,
+            String::new(),
+            PATHS[0],
+            body,
+            "\"slug\":\"admin\"",
+        );
+        assert_eq!((path.as_str(), kind), ("/wp-json/wp/v2/users", "json"));
+        let (s, e) = signal.span.unwrap();
+        assert_eq!(&text[s..e], "\"slug\":\"admin\"");
     }
 }

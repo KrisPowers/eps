@@ -12,6 +12,8 @@ pub struct Secret {
     /// `high` or `medium`.
     pub severity: &'static str,
     pub why: &'static str,
+    /// What someone holding it could do.
+    pub impact: &'static str,
     /// Byte offset of the credential itself.
     pub at: usize,
     /// Its length in bytes.
@@ -25,6 +27,27 @@ pub struct Call {
     pub method: String,
     /// The address as the code names it.
     pub url: String,
+    /// Byte offset of the address in the code.
+    pub at: usize,
+}
+
+/// What someone holding a credential of this kind could do with it.
+pub fn impact(label: &str) -> &'static str {
+    match label {
+        "AWS access key" | "Azure storage key" => "Whoever downloads the page can use the key to read, change or delete what it reaches in your cloud account, and run up its bill.",
+        "Google API key" => "Others can use the key from their own sites and apps, spending your quota and your money.",
+        "Stripe secret key" => "Anyone can issue refunds, read customer and payment data, and change your Stripe account.",
+        "Stripe test key" => "Anyone can read and change your Stripe account's test data and settings.",
+        "GitHub token" | "GitLab token" => "Anyone can read your private repositories and, with write access, push code that ships to your users.",
+        "npm token" => "Anyone can publish a new version of your packages, which every project installing them would then run.",
+        "Slack token" => "Anyone can read your workspace's messages and post as you.",
+        "Slack webhook" => "Anyone can post messages into the channel, convincing phishing links included.",
+        "Anthropic API key" | "OpenAI API key" | "SendGrid API key" => "Anyone can use the service on your account: your bill, your quota, and for mail, messages sent in your name.",
+        "JSON Web Token" => "Whoever holds the token is treated as the account it was issued to until it expires.",
+        "Private key" => "Traffic it protects can be decrypted and anything it signs can be forged.",
+        "Password in an address" => "Anyone reading the code can sign in to the service in the address, often a database, with that account.",
+        _ => "If it's real, anyone who reads the code can sign in to whatever it protects.",
+    }
 }
 
 /// A credential with a format of its own: a prefix, then a body of `size`
@@ -183,6 +206,7 @@ pub fn secrets(code: &str) -> Vec<Secret> {
                     label: t.label,
                     severity: t.severity,
                     why: t.why,
+                    impact: impact(t.label),
                     at,
                     len,
                 },
@@ -198,6 +222,7 @@ pub fn secrets(code: &str) -> Vec<Secret> {
             add(
                 Secret {
                     label: "Private key",
+                    impact: impact("Private key"),
                     severity: "high",
                     why: "A private key in code anyone can download. Whatever it signs or decrypts is no longer private: replace it.",
                     at: start,
@@ -211,6 +236,7 @@ pub fn secrets(code: &str) -> Vec<Secret> {
         add(
             Secret {
                 label: "Password in an address",
+                impact: impact("Password in an address"),
                 severity: "high",
                 why: "An address with a user name and password in it, readable by anyone who downloads the code.",
                 at,
@@ -223,6 +249,7 @@ pub fn secrets(code: &str) -> Vec<Secret> {
         add(
             Secret {
                 label: "Password or key in the code",
+                impact: impact("Password or key in the code"),
                 severity: "medium",
                 why: "A value assigned to a name that holds a password or key. If it's real, anyone who reads the code has it: move it to the server and change it.",
                 at,
@@ -435,6 +462,7 @@ pub fn requests(code: &str) -> Vec<Call> {
             out.push(Call {
                 method,
                 url: url.to_string(),
+                at: url.as_ptr() as usize - code.as_ptr() as usize,
             });
         }
     };
@@ -454,11 +482,11 @@ pub fn requests(code: &str) -> Vec<Call> {
             f(i);
         }
     };
-    let mut found: Vec<(String, String)> = Vec::new();
+    let mut found: Vec<(String, &str)> = Vec::new();
     each("fetch(", &mut |i| {
         if let Some(url) = literal(code, skip(code, i)) {
             let method = method_in(window(i)).unwrap_or_else(|| "GET".to_string());
-            found.push((method, url.to_string()));
+            found.push((method, url));
         }
     });
     each(".open(", &mut |i| {
@@ -472,13 +500,13 @@ pub fn requests(code: &str) -> Vec<Call> {
             return;
         }
         if let Some(url) = literal(code, skip(code, k + 1)) {
-            found.push((m.to_ascii_uppercase(), url.to_string()));
+            found.push((m.to_ascii_uppercase(), url));
         }
     });
     for m in METHODS {
         each(&format!(".{m}("), &mut |i| {
             if let Some(url) = literal(code, skip(code, i)).filter(|u| addressy(u)) {
-                found.push((m.to_ascii_uppercase(), url.to_string()));
+                found.push((m.to_ascii_uppercase(), url));
             }
         });
     }
@@ -496,22 +524,22 @@ pub fn requests(code: &str) -> Vec<Call> {
             }
             if let Some(url) = literal(w, skip(w, j + 1)).filter(|u| addressy(u)) {
                 let method = method_in(w).unwrap_or_else(|| "GET".to_string());
-                found.push((method, url.to_string()));
+                found.push((method, url));
             }
         });
     }
     each("sendBeacon(", &mut |i| {
         if let Some(url) = literal(code, skip(code, i)) {
-            found.push(("POST".to_string(), url.to_string()));
+            found.push(("POST".to_string(), url));
         }
     });
     each("WebSocket(", &mut |i| {
         if let Some(url) = literal(code, skip(code, i)) {
-            found.push(("WS".to_string(), url.to_string()));
+            found.push(("WS".to_string(), url));
         }
     });
     for (method, url) in found {
-        add(method, &url);
+        add(method, url);
     }
     out
 }

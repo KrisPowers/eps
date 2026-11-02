@@ -26,6 +26,7 @@ pub mod code;
 pub mod names;
 pub mod paths;
 pub mod site;
+pub mod source;
 pub mod tls;
 pub mod wordpress;
 

