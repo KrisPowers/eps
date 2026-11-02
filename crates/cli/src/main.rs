@@ -360,6 +360,12 @@ async fn check(op: scan::OpenPort, ctx: &Checks<'_>) -> Checked {
     let mut one = report::assemble(&ctx.host, &ctx.rendered_ip, std::slice::from_ref(&op), svc);
     one.open_ports[0].banner = banner.clone();
     let technologies = report::technologies(&one.open_ports, svc);
+    // The site's files, whole, come with the report; the progress the
+    // dashboard polls stays small.
+    let mut site = serde_json::to_value(one.sites.first()).unwrap_or_default();
+    if let Some(fields) = site.as_object_mut() {
+        fields.remove("files");
+    }
     ctx.progress.checked(
         op.port,
         serde_json::json!({
@@ -368,7 +374,7 @@ async fn check(op: scan::OpenPort, ctx: &Checks<'_>) -> Checked {
             "tls": one.open_ports[0].tls,
             "apis": one.apis,
             "technologies": technologies,
-            "site": one.sites.first(),
+            "site": site,
         }),
     );
     Checked {
