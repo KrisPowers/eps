@@ -39,8 +39,9 @@ what to do about it.
   checked before anyone opens it. Each page, every script it loads, the
   original source in its source maps, PHP it serves as source, `robots.txt` and,
   on WordPress, a few of its answers are fetched and read, never run. Every
-  file something was found in is listed and re-printed with the code behind
-  each concern highlighted and a note on what could happen as a result.
+  file something was found in opens in full in an editor on the dashboard,
+  with a minimap and the code behind each concern underlined; a concern opens
+  to say what it is and what could happen as a result.
   - Forms are one concern each, naming where the form submits and how, with
     every problem it has: file uploads (any type, or limited only in the
     browser), passwords filled in, sent in the address, over plain HTTP or to
