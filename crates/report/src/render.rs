@@ -556,6 +556,15 @@ fn site_section(paint: Paint, report: &Report, out: &mut String) {
             row.pad_to(55);
             row.add(ACCENT, &fit(&x.page, WIDTH - 55));
             row.finish(out);
+            for i in &x.issues {
+                let mut row = Row::new(paint);
+                row.pad_to(11);
+                row.add(
+                    "",
+                    &fit(&format!("{}  {}", i.severity, i.label), WIDTH - 11),
+                );
+                row.finish(out);
+            }
         }
     }
 }
